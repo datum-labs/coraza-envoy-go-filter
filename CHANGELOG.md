@@ -1,9 +1,14 @@
 # Changelog
 
+## [v1.2.0-rc0] - 2025-10-17
+
+### Changed
+- Add basic configuration merging to support route based config overrides.
+
 ## [v1.1.1] - 2025-09-18
 
 ### Changed
-- Update go to version 1.24.6 ([#32](https://github.com/united-security-providers/coraza-envoy-go-filter/issues/32)) ([daum3ns](https://github.com/daum3ns)) 
+- Update go to version 1.24.6 ([#32](https://github.com/united-security-providers/coraza-envoy-go-filter/issues/32)) ([daum3ns](https://github.com/daum3ns))
 
 ## [v1.1.0] - 2025-09-18
 
@@ -34,7 +39,7 @@ _First release._
 ### Fixed
 - Fix filter disrupts websocket connections ([#18](https://github.com/united-security-providers/coraza-envoy-go-filter/issues/18)) ([daum3ns](https://github.com/daum3ns))
 - Fix wrong status code returned when reaching body limits ([#6](https://github.com/united-security-providers/coraza-envoy-go-filter/issues/6)) ([daum3ns](https://github.com/daum3ns))
-- Fix wrong status code returned ([#5](https://github.com/united-security-providers/coraza-envoy-go-filter/pull/5)) ([daum3ns](https://github.com/daum3ns)) 
+- Fix wrong status code returned ([#5](https://github.com/united-security-providers/coraza-envoy-go-filter/pull/5)) ([daum3ns](https://github.com/daum3ns))
 - Fix avoid response inspection if SecResponseBodyAccess is off ([#4](https://github.com/united-security-providers/coraza-envoy-go-filter/pull/4/)) ([Armin Abfalterer](https://github.com/arminabf))
 - Fix go-ftw testbench (#X) ([daum3ns](https://github.com/daum3ns))
 - Fix rule exclusion via SecAction to not working (#X) ([daum3ns](https://github.com/daum3ns))
