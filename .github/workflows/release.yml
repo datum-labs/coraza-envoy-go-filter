@@ -34,20 +34,20 @@ jobs:
       - name: Generate Release Notes
         id: notes
         uses: theory/changelog-version-notes-action@v0.1.3
+        if: ${{ !contains(github.ref_name, '-alpha') }}
       - name: Release Candidate
         uses: softprops/action-gh-release@v2
-        if: ${{ contains(github.ref_name, '-rc') }}
+        if: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha')}}
         with:
           body_path: '${{ steps.notes.outputs.file }}'
           generate_release_notes: false
           prerelease: true
           files: |
-            CHANGELOG.md
             LICENSE
             coraza-waf.so
       - name: Final Release
         uses: softprops/action-gh-release@v2
-        if: ${{ !contains(github.ref_name, '-rc') }}
+        if: ${{ !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-alpha') }}
         with:
           body_path: '${{ steps.notes.outputs.file }}'
           generate_release_notes: false
