@@ -155,7 +155,58 @@ func (p parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (inte
 }
 
 func (p parser) Merge(parentConfig interface{}, childConfig interface{}) interface{} {
-	panic("TODO")
+	if parentConfig == nil {
+		return childConfig
+	}
+	if childConfig == nil {
+		return parentConfig
+	}
+
+	parent, ok := parentConfig.(*configuration)
+	if !ok {
+		panic("unexpected parent config type")
+	}
+	child, ok := childConfig.(*configuration)
+	if !ok {
+		panic("unexpected child config type")
+	}
+
+	merged := &configuration{
+		directives:       make(WafDirectives),
+		defaultDirective: parent.defaultDirective,
+		hostDirectiveMap: make(HostDirectiveMap),
+		wafMaps:          make(wafMaps),
+		logFormat:        parent.logFormat,
+	}
+
+	for name, dirs := range parent.directives {
+		merged.directives[name] = Directives{SimpleDirectives: append([]string(nil), dirs.SimpleDirectives...)}
+	}
+	for host, directive := range parent.hostDirectiveMap {
+		merged.hostDirectiveMap[host] = directive
+	}
+	for name, waf := range parent.wafMaps {
+		merged.wafMaps[name] = waf
+	}
+
+	if child.defaultDirective != "" {
+		merged.defaultDirective = child.defaultDirective
+	}
+	if child.logFormat != "" {
+		merged.logFormat = child.logFormat
+	}
+
+	for name, dirs := range child.directives {
+		merged.directives[name] = Directives{SimpleDirectives: append([]string(nil), dirs.SimpleDirectives...)}
+		if waf, ok := child.wafMaps[name]; ok {
+			merged.wafMaps[name] = waf
+		}
+	}
+	for host, directive := range child.hostDirectiveMap {
+		merged.hostDirectiveMap[host] = directive
+	}
+
+	return merged
 }
 
 func errorCallback(error ctypes.MatchedRule) {
