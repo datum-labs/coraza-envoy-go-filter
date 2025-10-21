@@ -63,8 +63,7 @@ const HOSTPOSTSEPARATOR string = ":"
 
 type filter struct {
 	callbacks                   api.FilterCallbackHandler
-	conf                        configuration
-	wafMaps                     wafMaps
+	conf                        *configuration
 	tx                          types.Transaction
 	httpProtocol                string
 	isInterruption              bool
@@ -85,10 +84,26 @@ func (f *filter) DecodeHeaders(headerMap api.RequestHeaderMap, endStream bool) a
 	if len(host) == 0 {
 		return api.Continue
 	}
-	waf := f.conf.wafMaps[f.conf.defaultDirective]
-	ruleName, ok := f.conf.hostDirectiveMap[host]
-	if ok {
-		waf = f.conf.wafMaps[ruleName]
+	wafMaps, err := f.conf.getWAFMaps()
+	if err != nil {
+		f.logCritical("failed to initialize waf maps", err)
+		f.callbacks.DecoderFilterCallbacks().SendLocalReply(http.StatusInternalServerError, "", map[string][]string{}, 0, "waf-init-error")
+		return api.LocalReply
+	}
+	waf, ok := wafMaps[f.conf.defaultDirective]
+	if !ok || waf == nil {
+		f.logCritical("default directive missing from waf map", struct{ K, V string }{"directive", f.conf.defaultDirective})
+		f.callbacks.DecoderFilterCallbacks().SendLocalReply(http.StatusInternalServerError, "", map[string][]string{}, 0, "waf-not-configured")
+		return api.LocalReply
+	}
+	if ruleName, ok := f.conf.hostDirectiveMap[host]; ok {
+		override, exists := wafMaps[ruleName]
+		if !exists || override == nil {
+			f.logCritical("host directive missing from waf map", struct{ K, V string }{"directive", ruleName}, struct{ K, V string }{"host", host})
+			f.callbacks.DecoderFilterCallbacks().SendLocalReply(http.StatusInternalServerError, "", map[string][]string{}, 0, "waf-not-configured")
+			return api.LocalReply
+		}
+		waf = override
 	}
 
 	xReqId, exist := headerMap.Get("x-request-id")
@@ -102,7 +117,6 @@ func (f *filter) DecodeHeaders(headerMap api.RequestHeaderMap, endStream bool) a
 	f.tx = waf.NewTransactionWithID(xReqId)
 	f.tx.AddRequestHeader("Host", host)
 	var server = host
-	var err error
 	if strings.Contains(host, HOSTPOSTSEPARATOR) {
 		server, _, err = net.SplitHostPort(host)
 		if err != nil {

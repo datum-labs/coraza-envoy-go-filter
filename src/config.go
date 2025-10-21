@@ -16,8 +16,7 @@ func configFactory() api.StreamFilterFactory {
 		}
 		return &filter{
 			callbacks: callbacks,
-			wafMaps:   conf.wafMaps,
-			conf:      *conf,
+			conf:      conf,
 			logger:    BuildLoggerMessage(conf.logFormat),
 		}
 	}

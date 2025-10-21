@@ -5,11 +5,14 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	xds "github.com/cncf/xds/go/xds/type/v3"
 	"github.com/corazawaf/coraza/v3"
@@ -32,8 +35,31 @@ type configuration struct {
 	directives       WafDirectives
 	defaultDirective string
 	hostDirectiveMap HostDirectiveMap
-	wafMaps          wafMaps
 	logFormat        string
+}
+
+// TODO(jreese) move away from sync.Map, use mutexes
+func (c *configuration) Destroy() {
+	api.LogCriticalf("Destroying coraza-waf configuration")
+	for _, wafRules := range c.directives {
+		directivesString := strings.Join(wafRules.SimpleDirectives, "\n")
+		directivesHash := sha256.Sum256([]byte(directivesString))
+		if v, ok := wafCache.Load(directivesHash); ok {
+			e := v.(wafCacheEntry)
+			newRefCount := atomic.AddInt32(&e.refCount, -1)
+			if newRefCount <= 0 {
+				api.LogCriticalf("deleting WAF for directives hash %x", directivesHash)
+				wafCache.Delete(directivesHash)
+			}
+		}
+	}
+}
+
+var wafCache = sync.Map{}
+
+type wafCacheEntry struct {
+	waf      coraza.WAF
+	refCount int32
 }
 
 type wafMaps map[string]coraza.WAF
@@ -66,10 +92,40 @@ type JSONErrorLogLine struct {
 	RequestID      string           `json:"request.id"`
 }
 
+func (c *configuration) getWAFMaps() (wafMaps, error) {
+	configWafMaps := make(wafMaps)
+	for wafName, wafRules := range c.directives {
+		directivesString := strings.Join(wafRules.SimpleDirectives, "\n")
+		directivesHash := sha256.Sum256([]byte(directivesString))
+		if v, ok := wafCache.Load(directivesHash); ok {
+			e := v.(wafCacheEntry)
+			atomic.AddInt32(&e.refCount, 1)
+			configWafMaps[wafName] = v.(wafCacheEntry).waf
+
+			api.LogCriticalf("reusing cached WAF for directives hash %x", directivesHash)
+			continue
+		}
+
+		wafConfig := coraza.NewWAFConfig().
+			WithErrorCallback(errorCallback).
+			WithRootFS(root).
+			WithDirectives(directivesString)
+		waf, err := coraza.NewWAF(wafConfig)
+		if err != nil {
+			return nil, fmt.Errorf("%s mapping waf init error:%s", wafName, err.Error())
+		}
+		wafCache.Store(directivesHash, wafCacheEntry{waf: waf, refCount: 1})
+		configWafMaps[wafName] = waf
+	}
+
+	return configWafMaps, nil
+}
+
 var filePathPrefix = regexp.MustCompile(".*/")
 var logFormat string
 
 func (p parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (interface{}, error) {
+	api.LogCriticalf("Parsing coraza-waf config: %+v", any)
 	configStruct := &xds.TypedStruct{}
 	if err := any.UnmarshalTo(configStruct); err != nil {
 		return nil, err
@@ -87,18 +143,6 @@ func (p parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (inte
 			return nil, errors.New("directives is empty")
 		}
 		config.directives = wafDirectives
-
-		// parse the WAFs into config.wafMaps in any case
-		wafMaps := make(wafMaps)
-		for wafName, wafRules := range config.directives {
-			wafConfig := coraza.NewWAFConfig().WithErrorCallback(errorCallback).WithRootFS(root).WithDirectives(strings.Join(wafRules.SimpleDirectives, "\n"))
-			waf, err := coraza.NewWAF(wafConfig)
-			if err != nil {
-				return nil, errors.New(fmt.Sprintf("%s mapping waf init error:%s", wafName, err.Error()))
-			}
-			wafMaps[wafName] = waf
-		}
-		config.wafMaps = wafMaps
 	} else {
 		return nil, errors.New("directives does not exist")
 	}
@@ -155,6 +199,7 @@ func (p parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (inte
 }
 
 func (p parser) Merge(parentConfig interface{}, childConfig interface{}) interface{} {
+	api.LogCriticalf("Merging coraza-waf configs: parent %+v, child %+v", parentConfig, childConfig)
 	if parentConfig == nil {
 		return childConfig
 	}
@@ -162,51 +207,18 @@ func (p parser) Merge(parentConfig interface{}, childConfig interface{}) interfa
 		return parentConfig
 	}
 
-	parent, ok := parentConfig.(*configuration)
-	if !ok {
-		panic("unexpected parent config type")
-	}
-	child, ok := childConfig.(*configuration)
-	if !ok {
-		panic("unexpected child config type")
-	}
+	// parent, ok := parentConfig.(*configuration)
+	// if !ok {
+	// 	panic("unexpected parent config type")
+	// }
+	// child, ok := childConfig.(*configuration)
+	// if !ok {
+	// 	panic("unexpected child config type")
+	// }
 
-	merged := &configuration{
-		directives:       make(WafDirectives),
-		defaultDirective: parent.defaultDirective,
-		hostDirectiveMap: make(HostDirectiveMap),
-		wafMaps:          make(wafMaps),
-		logFormat:        parent.logFormat,
-	}
+	// TODO(jreese): implement merging logic
 
-	for name, dirs := range parent.directives {
-		merged.directives[name] = Directives{SimpleDirectives: append([]string(nil), dirs.SimpleDirectives...)}
-	}
-	for host, directive := range parent.hostDirectiveMap {
-		merged.hostDirectiveMap[host] = directive
-	}
-	for name, waf := range parent.wafMaps {
-		merged.wafMaps[name] = waf
-	}
-
-	if child.defaultDirective != "" {
-		merged.defaultDirective = child.defaultDirective
-	}
-	if child.logFormat != "" {
-		merged.logFormat = child.logFormat
-	}
-
-	for name, dirs := range child.directives {
-		merged.directives[name] = Directives{SimpleDirectives: append([]string(nil), dirs.SimpleDirectives...)}
-		if waf, ok := child.wafMaps[name]; ok {
-			merged.wafMaps[name] = waf
-		}
-	}
-	for host, directive := range child.hostDirectiveMap {
-		merged.hostDirectiveMap[host] = directive
-	}
-
-	return merged
+	return childConfig
 }
 
 func errorCallback(error ctypes.MatchedRule) {
