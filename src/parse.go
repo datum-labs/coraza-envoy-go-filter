@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"sync/atomic"
+	"time"
 
 	xds "github.com/cncf/xds/go/xds/type/v3"
 	"github.com/corazawaf/coraza/v3"
@@ -36,30 +36,29 @@ type configuration struct {
 	defaultDirective string
 	hostDirectiveMap HostDirectiveMap
 	logFormat        string
+	wafs             wafMaps
+	wafHashes        map[string][sha256.Size]byte
+	wafMu            sync.RWMutex
 }
 
-// TODO(jreese) move away from sync.Map, use mutexes
 func (c *configuration) Destroy() {
-	api.LogCriticalf("Destroying coraza-waf configuration")
-	for _, wafRules := range c.directives {
-		directivesString := strings.Join(wafRules.SimpleDirectives, "\n")
-		directivesHash := sha256.Sum256([]byte(directivesString))
-		if v, ok := wafCache.Load(directivesHash); ok {
-			e := v.(wafCacheEntry)
-			newRefCount := atomic.AddInt32(&e.refCount, -1)
-			if newRefCount <= 0 {
-				api.LogCriticalf("deleting WAF for directives hash %x", directivesHash)
-				wafCache.Delete(directivesHash)
-			}
-		}
+	c.wafMu.Lock()
+	defer c.wafMu.Unlock()
+	for _, directivesHash := range c.wafHashes {
+		wafCache.release(directivesHash)
 	}
+	c.wafs = nil
+	c.wafHashes = nil
 }
 
-var wafCache = sync.Map{}
+var wafCache = newWafCacheStore(5 * time.Second)
 
 type wafCacheEntry struct {
-	waf      coraza.WAF
-	refCount int32
+	waf      coraza.WAF // shared WAF instance
+	refCount int32      // active configurations referencing the WAF
+	zeroAt   time.Time  // timestamp when refCount hit zero, for deferred eviction
+
+	buildErr error // error encountered during WAF build, if any
 }
 
 type wafMaps map[string]coraza.WAF
@@ -93,32 +92,37 @@ type JSONErrorLogLine struct {
 }
 
 func (c *configuration) getWAFMaps() (wafMaps, error) {
-	configWafMaps := make(wafMaps)
-	for wafName, wafRules := range c.directives {
-		directivesString := strings.Join(wafRules.SimpleDirectives, "\n")
-		directivesHash := sha256.Sum256([]byte(directivesString))
-		if v, ok := wafCache.Load(directivesHash); ok {
-			e := v.(wafCacheEntry)
-			atomic.AddInt32(&e.refCount, 1)
-			configWafMaps[wafName] = v.(wafCacheEntry).waf
+	c.wafMu.RLock()
+	if c.wafs != nil {
+		c.wafMu.RUnlock()
+		return c.wafs, nil
+	}
+	c.wafMu.RUnlock()
+	c.wafMu.Lock()
 
-			api.LogCriticalf("reusing cached WAF for directives hash %x", directivesHash)
-			continue
+	c.wafs = make(wafMaps, len(c.directives))
+	for wafName, directivesHash := range c.wafHashes {
+		wafRules, ok := c.directives[wafName]
+		if !ok {
+			c.wafMu.Unlock()
+			return nil, fmt.Errorf("directive '%s' missing during WAF initialization", wafName)
 		}
 
-		wafConfig := coraza.NewWAFConfig().
-			WithErrorCallback(errorCallback).
-			WithRootFS(root).
-			WithDirectives(directivesString)
-		waf, err := coraza.NewWAF(wafConfig)
+		waf, err := wafCache.ensure(directivesHash, func() (coraza.WAF, error) {
+			wafConfig := coraza.NewWAFConfig().
+				WithErrorCallback(errorCallback).
+				WithRootFS(root).
+				WithDirectives(strings.Join(wafRules.SimpleDirectives, "\n"))
+			return coraza.NewWAF(wafConfig)
+		})
 		if err != nil {
+			c.wafMu.Unlock()
 			return nil, fmt.Errorf("%s mapping waf init error:%s", wafName, err.Error())
 		}
-		wafCache.Store(directivesHash, wafCacheEntry{waf: waf, refCount: 1})
-		configWafMaps[wafName] = waf
+		c.wafs[wafName] = waf
 	}
-
-	return configWafMaps, nil
+	c.wafMu.Unlock()
+	return c.wafs, nil
 }
 
 var filePathPrefix = regexp.MustCompile(".*/")
@@ -172,7 +176,7 @@ func (p parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (inte
 			for host, rule := range hostDirectiveMap {
 				_, ok := config.directives[rule]
 				if !ok {
-					return nil, errors.New(fmt.Sprintf("the referenced directive '%s' for host %s does not exist", rule, host))
+					return nil, fmt.Errorf("the referenced directive '%s' for host %s does not exist", rule, host)
 				}
 			}
 			config.hostDirectiveMap = hostDirectiveMap
@@ -193,6 +197,14 @@ func (p parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (inte
 		config.logFormat = "plain"
 		logFormat = "plain"
 		api.LogInfo(BuildLoggerMessage(logFormat).Log("No log_format provided. Using default 'plain'"))
+	}
+
+	config.wafHashes = make(map[string][sha256.Size]byte, len(config.directives))
+	for wafName, wafRules := range config.directives {
+		directivesString := strings.Join(wafRules.SimpleDirectives, "\n")
+		directivesHash := sha256.Sum256([]byte(directivesString))
+		config.wafHashes[wafName] = directivesHash
+		wafCache.retain(directivesHash)
 	}
 
 	return &config, nil
