@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -21,10 +22,19 @@ import (
 	"github.com/envoyproxy/envoy/contrib/golang/filters/http/source/go/pkg/http"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
+var meter = otel.Meter("coraza-envoy-go-filter")
+
 func init() {
+	_, err := setupOpenTelemetry(context.Background())
+
+	if err != nil {
+		panic(fmt.Sprintf("failed to setup OpenTelemetry: %v", err))
+	}
+
 	http.RegisterHttpFilterFactoryAndConfigParser("coraza-waf", configFactory(), &parser{})
 }
 
