@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"crypto/sha256"
 	"sync"
 	"time"
 
 	"github.com/corazawaf/coraza/v3"
-	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -26,19 +24,14 @@ type wafCacheStore struct {
 	// duration to keep zero-ref entries alive
 	ttl time.Duration
 
-	wafInstanceCacheHit metric.Int64Counter
+	metrics *wafCacheMetrics
 }
 
 func newWafCacheStore(ttl time.Duration) *wafCacheStore {
-	wafInstanceCacheHit, err := meter.Int64Counter("waf_instance_cache_hit")
-	if err != nil {
-		panic(err)
-	}
-
 	return &wafCacheStore{
-		entries:             make(map[[sha256.Size]byte]*wafCacheEntry),
-		ttl:                 ttl,
-		wafInstanceCacheHit: wafInstanceCacheHit,
+		entries: make(map[[sha256.Size]byte]*wafCacheEntry),
+		ttl:     ttl,
+		metrics: newWafCacheMetrics(meter),
 	}
 }
 
@@ -48,6 +41,7 @@ func (c *wafCacheStore) retain(hash [sha256.Size]byte) {
 	if entry, ok := c.entries[hash]; ok {
 		entry.refCount++
 		entry.zeroAt = time.Time{}
+		c.metrics.recordRetain(false)
 		c.mu.Unlock()
 		return
 	}
@@ -55,6 +49,7 @@ func (c *wafCacheStore) retain(hash [sha256.Size]byte) {
 		refCount: 1,
 	}
 	c.entries[hash] = entry
+	c.metrics.recordRetain(true)
 	c.mu.Unlock()
 }
 
@@ -71,7 +66,7 @@ func (c *wafCacheStore) ensure(hash [sha256.Size]byte, build func() (coraza.WAF,
 	}
 
 	if entry.waf != nil {
-		c.wafInstanceCacheHit.Add(context.Background(), 1)
+		c.metrics.recordHit()
 		waf := entry.waf
 		c.mu.RUnlock()
 		return waf, nil
@@ -83,10 +78,12 @@ func (c *wafCacheStore) ensure(hash [sha256.Size]byte, build func() (coraza.WAF,
 		return nil, err
 	}
 
+	c.metrics.recordMiss()
+
 	// Release main lock before entering singleflight to avoid blocking other operations.
 	c.mu.RUnlock()
 
-	waf, err, _ := c.group.Do(string(hash[:]), func() (interface{}, error) {
+	waf, err, shared := c.group.Do(string(hash[:]), func() (interface{}, error) {
 		// Optimistic check if another goroutine created the WAF while we waited for
 		// the lock.
 		c.mu.Lock()
@@ -114,11 +111,13 @@ func (c *wafCacheStore) ensure(hash [sha256.Size]byte, build func() (coraza.WAF,
 		// Release the lock while building the WAF.
 		c.mu.Unlock()
 
+		start := time.Now()
 		waf, err := build()
 		if err != nil {
 			c.mu.Lock()
 			entry.buildErr = err
 			c.mu.Unlock()
+			c.metrics.recordBuild("error", time.Since(start))
 			return nil, err
 		}
 
@@ -128,10 +127,15 @@ func (c *wafCacheStore) ensure(hash [sha256.Size]byte, build func() (coraza.WAF,
 		entry.zeroAt = time.Time{}
 		c.mu.Unlock()
 
+		c.metrics.recordBuild("success", time.Since(start))
+
 		return waf, nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if shared {
+		c.metrics.recordSingleflightShared()
 	}
 	return waf.(coraza.WAF), nil
 }
@@ -179,4 +183,6 @@ func (c *wafCacheStore) evictIfExpired(hash [sha256.Size]byte, zeroAt time.Time)
 	}
 	delete(c.entries, hash)
 	c.mu.Unlock()
+
+	c.metrics.recordEviction("ttl_expired")
 }
