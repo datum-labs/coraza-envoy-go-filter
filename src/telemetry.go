@@ -8,7 +8,9 @@ import (
 	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 func setupOpenTelemetry(ctx context.Context) (shutdown func(context.Context) error, err error) {
@@ -34,7 +36,17 @@ func setupOpenTelemetry(ctx context.Context) (shutdown func(context.Context) err
 		err = errors.Join(err, shutdown(ctx))
 		return
 	}
-	tp := trace.NewTracerProvider(trace.WithBatcher(texporter))
+	traceResource, err := resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName("coraza-envoy-filter"),
+		),
+	)
+	tp := trace.NewTracerProvider(
+		trace.WithBatcher(texporter),
+		trace.WithResource(traceResource),
+	)
 	shutdownFuncs = append(shutdownFuncs, tp.Shutdown)
 	otel.SetTracerProvider(tp)
 

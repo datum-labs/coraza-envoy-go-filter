@@ -5,6 +5,8 @@
 package main
 
 import (
+	"errors"
+
 	"github.com/envoyproxy/envoy/contrib/golang/common/go/api"
 )
 
@@ -14,10 +16,31 @@ func configFactory() api.StreamFilterFactory {
 		if !ok {
 			panic("unexpected config type")
 		}
+
+		metadata := filterMetadata{
+			clusterName:     getPropertyOrLogError(callbacks, "xds.cluster_name"),
+			virtualHostName: getPropertyOrLogError(callbacks, "xds.virtual_host_name"),
+			routeName:       callbacks.StreamInfo().GetRouteName(),
+			filterChainName: callbacks.StreamInfo().FilterChainName(),
+		}
+
 		return &filter{
 			callbacks: callbacks,
 			conf:      conf,
 			logger:    BuildLoggerMessage(conf.logFormat),
+			metadata:  metadata,
 		}
 	}
+}
+
+func getPropertyOrLogError(callbacks api.FilterCallbackHandler, key string) string {
+	value, err := callbacks.GetProperty(key)
+	if err != nil {
+		if errors.Is(err, api.ErrValueNotFound) {
+			return ""
+		}
+		api.LogErrorf("failed to get property %s: %v", key, err)
+		return ""
+	}
+	return value
 }
