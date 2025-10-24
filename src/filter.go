@@ -15,7 +15,6 @@ import (
 
 	"github.com/corazawaf/coraza/v3/types"
 	"github.com/envoyproxy/envoy/contrib/golang/common/go/api"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -65,8 +64,6 @@ var connectionStateName = map[ConnectionState]string{
 }
 
 const HOSTPOSTSEPARATOR string = ":"
-
-var filterTracer = otel.Tracer("coraza/envoy/filter")
 
 const (
 	wafOutcomeProcessing = "processing"
