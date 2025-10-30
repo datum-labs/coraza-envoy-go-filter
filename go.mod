@@ -1,6 +1,6 @@
 module coraza-waf
 
-go 1.23.0
+go 1.25.3
 
 toolchain go1.24.6
 
