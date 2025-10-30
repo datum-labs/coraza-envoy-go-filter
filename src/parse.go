@@ -59,8 +59,8 @@ type configuration struct {
 
 	// A map of WAF directive names to their waf instance
 
-	wafInstanceRefs             map[string]string
-	traceRouteMetadataExtractor *metadataExtractorHandle
+	wafInstanceRefs                       map[string]string
+	traceRouteMetadataExtractorExpression string
 }
 
 // func (c *configuration) Destroy() {
@@ -185,14 +185,7 @@ func (p parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (inte
 		if !ok {
 			return nil, errors.New("trace_route_metadata_extractor must be a string")
 		}
-		extractorExpr = strings.TrimSpace(extractorExpr)
-		if extractorExpr != "" {
-			handle, err := routeMetadataExtractorCache.retain(extractorExpr)
-			if err != nil {
-				return nil, fmt.Errorf("compile trace_route_metadata_extractor: %w", err)
-			}
-			config.traceRouteMetadataExtractor = handle
-		}
+		config.traceRouteMetadataExtractorExpression = strings.TrimSpace(extractorExpr)
 	}
 
 	return &config, nil
@@ -216,15 +209,9 @@ func (p parser) Merge(parentConfig interface{}, childConfig interface{}) interfa
 		panic("unexpected child config type")
 	}
 
-	if child.traceRouteMetadataExtractor == nil && parent.traceRouteMetadataExtractor != nil && parent.traceRouteMetadataExtractor.expr != "" {
-		handle, err := routeMetadataExtractorCache.retain(parent.traceRouteMetadataExtractor.expr)
-		if err != nil {
-			api.LogErrorf("failed to retain trace_route_metadata_extractor expression: %v", err)
-		} else {
-			child.traceRouteMetadataExtractor = handle
-		}
+	if len(child.traceRouteMetadataExtractorExpression) == 0 && len(parent.traceRouteMetadataExtractorExpression) > 0 {
+		child.traceRouteMetadataExtractorExpression = parent.traceRouteMetadataExtractorExpression
 	}
-	api.LogCritical("Merged coraza-waf configs successfully")
 
 	return child
 }

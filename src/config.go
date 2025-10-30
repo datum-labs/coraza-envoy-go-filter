@@ -35,12 +35,17 @@ func configFactory() api.StreamFilterFactory {
 			}
 		}
 
-		if conf.traceRouteMetadataExtractor != nil && routeMetadata != nil {
-			attrs, err := conf.traceRouteMetadataExtractor.Evaluate(routeMetadata)
+		if len(conf.traceRouteMetadataExtractorExpression) > 0 && routeMetadata != nil {
+			metadataExtractor, err := metadataExtractorFactory(conf.traceRouteMetadataExtractorExpression)
 			if err != nil {
-				api.LogErrorf("trace_route_metadata_extractor evaluation failed: %v", err)
+				api.LogErrorf("compile trace_route_metadata_extractor: %v", err)
 			} else {
-				metadata.traceRouteAttributes = attrs
+				attrs, err := metadataExtractor.Evaluate(routeMetadata)
+				if err != nil {
+					api.LogErrorf("trace_route_metadata_extractor evaluation failed: %v", err)
+				} else {
+					metadata.traceRouteAttributes = attrs
+				}
 			}
 		}
 
