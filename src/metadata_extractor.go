@@ -98,9 +98,8 @@ func metadataToCELInput(md *corev3.Metadata) map[string]any {
 		if structVal == nil {
 			continue
 		}
-		if structVal != nil {
-			filterMetadata[ns] = structVal.AsMap()
-		}
+
+		filterMetadata[ns] = structVal.AsMap()
 	}
 	return map[string]any{
 		"filter_metadata": filterMetadata,
