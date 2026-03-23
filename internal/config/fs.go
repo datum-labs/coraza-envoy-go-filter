@@ -13,13 +13,14 @@ import (
 
 var (
 	//go:embed rules
-	crs  embed.FS
-	root fs.FS
+	crs embed.FS
+	// Root is the filesystem used for resolving CRS rule paths.
+	Root fs.FS
 )
 
 func init() {
 	rules, _ := fs.Sub(crs, "rules")
-	root = &rulesFS{
+	Root = &rulesFS{
 		rules,
 		map[string]string{
 			"@recommended-conf":    "coraza.conf-recommended.conf",
