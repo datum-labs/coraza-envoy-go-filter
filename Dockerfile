@@ -10,12 +10,15 @@ RUN mkdir /libinjection && \
     ./configure && \
     make install
 
+FROM golang:1.25 AS gobuilder
+
 FROM envoy AS build
-RUN apt update && apt install -y golang-1.23-go
+COPY --from=gobuilder /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}"
 WORKDIR /src
 COPY internal ./internal
 COPY main.go go.mod go.sum .
-RUN /usr/lib/go-1.23/bin/go build -o coraza-waf.so -buildmode=c-shared -tags=$BUILD_TAGS .
+RUN go build -o coraza-waf.so -buildmode=c-shared -tags=$BUILD_TAGS .
 ENTRYPOINT ["/usr/bin/cp", "/src/coraza-waf.so", "/build"]
 
 FROM envoyproxy/envoy:contrib-dev AS envoy-coraza
