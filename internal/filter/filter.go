@@ -302,12 +302,12 @@ func (f *Filter) EncodeHeaders(headerMap api.ResponseHeaderMap, endStream bool) 
 		return api.Continue
 	}
 
-	if f.tx.IsResponseBodyAccessible() && f.connection.IsHttp() {
+	if !endStream && f.tx.IsResponseBodyAccessible() && f.connection.IsHttp() {
 		logger.Debug("Buffering response headers")
 		return api.StopAndBuffer
 	}
 
-	return api.StopAndBufferWatermark
+	return api.Continue
 }
 
 func (f *Filter) EncodeData(buffer api.BufferInstance, endStream bool) api.StatusType {
@@ -341,8 +341,7 @@ func (f *Filter) EncodeData(buffer api.BufferInstance, endStream bool) api.Statu
 		logger.Debug("Buffered response body data", "size", buffered)
 		if err != nil {
 			logger.Error("Failed to write response body", "error", err)
-			f.Callbacks.EncoderFilterCallbacks().SendLocalReply(http.StatusInternalServerError, "", map[string][]string{}, 0, "")
-			return api.LocalReply
+			return api.Continue
 		}
 		/* WriteResponseBody triggers ProcessResponseBody if the bodylimit (SecResponseBodyLimit) is reached.
 		 * This means if we receive an interruption here it was evaluated and interrupted by response body processing.
