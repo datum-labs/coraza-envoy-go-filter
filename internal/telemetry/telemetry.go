@@ -47,12 +47,14 @@ func SetupOpenTelemetry(ctx context.Context) (shutdown func(context.Context) err
 		err = errors.Join(err, shutdown(ctx))
 		return
 	}
-	res, err := resource.Merge(
-		resource.Default(),
-		resource.NewWithAttributes(
-			semconv.SchemaURL,
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
 			semconv.ServiceName("coraza-envoy-filter"),
 		),
+		resource.WithFromEnv(),
+		resource.WithTelemetrySDK(),
+		resource.WithProcess(),
+		resource.WithHost(),
 	)
 	if err != nil {
 		err = errors.Join(err, shutdown(ctx))
