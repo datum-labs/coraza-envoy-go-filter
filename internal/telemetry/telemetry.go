@@ -47,18 +47,9 @@ func SetupOpenTelemetry(ctx context.Context) (shutdown func(context.Context) err
 		err = errors.Join(err, shutdown(ctx))
 		return
 	}
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName("coraza-envoy-filter"),
-		),
-		resource.WithFromEnv(),
-		resource.WithTelemetrySDK(),
-		resource.WithHost(),
+	res := resource.NewSchemaless(
+		semconv.ServiceName("coraza-envoy-filter"),
 	)
-	if err != nil {
-		err = errors.Join(err, shutdown(ctx))
-		return
-	}
 	tp := trace.NewTracerProvider(
 		trace.WithBatcher(texporter),
 		trace.WithResource(res),
