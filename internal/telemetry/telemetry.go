@@ -53,7 +53,6 @@ func SetupOpenTelemetry(ctx context.Context) (shutdown func(context.Context) err
 		),
 		resource.WithFromEnv(),
 		resource.WithTelemetrySDK(),
-		resource.WithProcess(),
 		resource.WithHost(),
 	)
 	if err != nil {
