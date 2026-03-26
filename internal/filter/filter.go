@@ -302,12 +302,11 @@ func (f *Filter) EncodeHeaders(headerMap api.ResponseHeaderMap, endStream bool) 
 		return api.Continue
 	}
 
-	if !endStream && f.tx.IsResponseBodyAccessible() && f.connection.IsHttp() {
-		logger.Debug("Buffering response headers")
-		return api.StopAndBuffer
-	}
-
-	return api.Continue
+	// Use StopAndBufferWatermark to stream response body data through
+	// EncodeData in chunks with backpressure, rather than StopAndBuffer
+	// which accumulates the entire response in memory and fails with
+	// response_payload_too_large for large responses.
+	return api.StopAndBufferWatermark
 }
 
 func (f *Filter) EncodeData(buffer api.BufferInstance, endStream bool) api.StatusType {
