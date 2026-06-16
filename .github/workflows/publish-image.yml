@@ -1,0 +1,138 @@
+name: Publish Multi-Arch Container Image
+
+# Triggers on every tag push (both releases and pre-releases).
+# The release.yml workflow handles GitHub Release assets (coraza-waf.so);
+# this workflow handles the ghcr.io OCI image.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  # Allow ad-hoc builds against a branch/SHA for testing.
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    name: Build and push (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    # Build each platform in a separate job so failures are isolated and logs
+    # are easy to read.  The per-platform digests are collected and merged into
+    # a single manifest-list by the `merge` job below.
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      # QEMU lets the buildx daemon understand non-native platforms when
+      # assembling the final manifest.  The build stage itself uses
+      # --platform=$BUILDPLATFORM + cross-compilation so no QEMU is needed
+      # during compilation — only during the scratch-layer copy.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/coraza-waf
+
+      # Derive a safe artifact name from the platform (linux/arm64 → linux-arm64)
+      - name: Prepare platform slug
+        id: slug
+        run: echo "platform=$(echo '${{ matrix.platform }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+
+      # Build for this platform only; push by digest so we can later merge
+      # both digests into a single manifest list.
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=ghcr.io/${{ github.repository }}/coraza-waf,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ steps.slug.outputs.platform }}
+          cache-to: type=gha,scope=${{ steps.slug.outputs.platform }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ steps.slug.outputs.platform }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge manifest list
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download all per-platform digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/coraza-waf
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=${{ github.ref_name }}
+
+      # Combine both per-platform images into a single multi-arch manifest.
+      - name: Create and push manifest list
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf 'ghcr.io/${{ github.repository }}/coraza-waf@sha256:%s ' *)
+
+      - name: Inspect final manifest
+        run: |
+          docker buildx imagetools inspect \
+            ghcr.io/${{ github.repository }}/coraza-waf:${{ steps.meta.outputs.version }}
