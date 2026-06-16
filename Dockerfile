@@ -3,7 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # BASE_IMAGE must be declared before the FROM that uses it.
-ARG BASE_IMAGE=scratch
+# busybox:1.36 provides cp (and other coreutils) on both amd64 and arm64,
+# which is required by the init-container pattern used to copy coraza-waf.so
+# into the Envoy shared volume.  scratch was used previously but broke that
+# pattern (alpha5 regression: "exec: cp: executable file not found").
+# Keep BASE_IMAGE overridable for callers that supply their own base.
+ARG BASE_IMAGE=busybox:1.36
 
 # ─── Build stage ────────────────────────────────────────────────────────────
 # Pinned to the builder's native arch ($BUILDPLATFORM) so the Go toolchain
@@ -70,7 +75,7 @@ RUN if [ "${BUILDPLATFORM}" = "${TARGETPLATFORM}" ]; then \
       ./src
 
 # ─── Final stage ────────────────────────────────────────────────────────────
-# Minimal scratch image used purely as a transport vehicle: the operator mounts
-# the .so into Envoy via a shared volume or init-container copy.
+# busybox:1.36 base provides cp for the init-container copy pattern while
+# remaining multi-arch (amd64 + arm64).  The .so is the only payload.
 FROM ${BASE_IMAGE}
 COPY --from=builder /coraza-waf.so /coraza-waf.so
