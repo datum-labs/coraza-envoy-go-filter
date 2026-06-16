@@ -1,4 +1,28 @@
-ARG BASE_IMAGE
-FROM ${BASE_IMAGE:-scratch}
+ARG BUILD_TAGS=coraza.rule.multiphase_evaluation
 
-COPY coraza-waf.so /coraza-waf.so
+FROM envoyproxy/envoy:contrib-v1.38.2 AS envoy
+ARG BUILD_TAGS
+
+RUN apt update && apt install -y libtool autoconf make libre2-dev curl tar python3 g++
+RUN mkdir /libinjection && \
+    curl -L https://github.com/libinjection/libinjection/archive/4aa3894b21d03d9d8fc364505c0617d2aca73fc1.tar.gz | tar -xz --strip-components 1 -C /libinjection && \
+    cd /libinjection && \
+    autoreconf -i --force && \
+    ./configure && \
+    make install
+
+FROM envoy AS build
+ARG BUILD_TAGS
+
+RUN apt update && apt install -y golang-1.24-go
+WORKDIR /src
+COPY internal ./internal
+COPY main.go go.mod go.sum .
+RUN /usr/lib/go-1.24/bin/go build -o coraza-waf.so -buildmode=c-shared -tags=$BUILD_TAGS .
+ENTRYPOINT ["/usr/bin/cp", "/src/coraza-waf.so", "/build"]
+
+FROM envoyproxy/envoy:contrib-v1.38.2 AS envoy-coraza
+COPY --from=build /usr/local/lib/libinjection.so* /usr/local/lib/
+COPY --from=build /src/coraza-waf.so /etc/envoy/coraza-waf.so
+COPY ./example/envoy.docker.yaml /etc/envoy/envoy.yaml
+RUN apt update && apt install -y libre2-9

@@ -2,6 +2,6 @@
 *.iml
 out
 gen
-coraza-waf.so
-ftw/logs
+build/
+tests/ftw/logs
 example/logs
