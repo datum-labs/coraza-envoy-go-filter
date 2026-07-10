@@ -1,5 +1,21 @@
 # Changelog
 
+## [v2.0.2-datum.1] - 2026-07-10
+
+*Datum realign of the downstream fork onto upstream v2.0.2 (see [datum-cloud/infra#3333](https://github.com/datum-cloud/infra/issues/3333)).*
+
+### Changed
+- Rebase the Datum value-add (per-host config overrides, WAF instance cache, CEL metadata extraction, OpenTelemetry tracing/metrics, and the multi-arch payload image) onto upstream **v2.0.2** (Coraza `v3.7.0`, CRS 4.25), replacing the stale `v1.3.0-alpha` lineage.
+- Keep the downstream config contract: `directives` and `host_directive_map` remain embedded JSON strings (upstream v2.0.0 switched to native YAML maps). The network-services-operator extension server emits JSON strings, so the parser retains the pre-v2.0 behaviour.
+- Add back-compat CRS include aliases `@recommended-conf` and `@crs-setup-conf` (mapped to the renamed `coraza.conf` / `crs-setup.conf`) so directives emitted downstream keep resolving against the upstream `coreruleset/` layout.
+- Pin Envoy to `v1.37.1` to match the edge proxy ABI (upstream moved to v1.38.1).
+
+### Security
+- Bump Go toolchain to 1.25.12 and upgrade OpenTelemetry (v1.43.0), gRPC (v1.80.0), `golang.org/x/net`, and `golang.org/x/sys` to clear the govulncheck-reported CVEs (GO-2026-*) in called code, so the `Vulnerability Scan` gate runs green. ([datum-cloud/infra#3336](https://github.com/datum-cloud/infra/issues/3336))
+
+### Fixed
+- Deliver response-body-phase WAF blocks: hold the upstream response headers (`StopAndBufferWatermark`, not `Continue`, on non-final `EncodeData` chunks) until the response-body verdict, so an Enforce block emits its branded local reply instead of committing the origin `200` (silent bypass) or resetting mid-stream. Drop the zero-fill `buffer.Set` on the local-reply path (empty body on Envoy 1.37.x). Requires `SecResponseBodyLimit <= per_connection_buffer_limit_bytes`. ([datum-cloud/infra#3324](https://github.com/datum-cloud/infra/issues/3324), [#3329](https://github.com/datum-cloud/infra/issues/3329))
+
 ## [v2.0.2] - 2026-06-09
 
 ### Changed
@@ -130,6 +146,7 @@ _First release._
 ### Known Issues
 - A bug in Coraza results in a wrong HTTP status code returned, if `SecResponseBodyLimit` is reached and `SecResponseBodyLimitAction` is set to `Reject`. Coraza incorrectly returns HTTP 413 instead of HTTP 500. ([corazawaf/coraza#1377](https://github.com/corazawaf/coraza/issues/1377))
 
+[v2.0.2-datum.1]: https://github.com/datum-labs/coraza-envoy-go-filter/releases/tag/v2.0.2-datum.1
 [v2.0.2]: https://github.com/united-security-providers/coraza-envoy-go-filter/releases/tag/v2.0.2
 [v2.0.1]: https://github.com/united-security-providers/coraza-envoy-go-filter/releases/tag/v2.0.1
 [v2.0.0]: https://github.com/united-security-providers/coraza-envoy-go-filter/releases/tag/v2.0.0

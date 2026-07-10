@@ -30,15 +30,10 @@ while [[ "$status_code" -eq "000" ]]; do
 done
 echo -e "\n[Ok] Got status code $status_code, expected 200. Ready to start."
 
-
 FTW_CLOUDMODE=${FTW_CLOUDMODE:-false}
 
 FTW_INCLUDE=$([ "${FTW_INCLUDE}" == "" ] && echo "" || echo "-i ${FTW_INCLUDE}")
 
-if [ "${FTW_FAILFAST+x}" ]; then
-  FTW_FAILFAST=" --fail-fast"
-else
-  FTW_FAILFAST=""
-fi
-
-/ftw run -d ./coreruleset/tests/regression/tests/ --config ftw.yml --overrides overrides.yml --read-timeout=10s --cloud=$FTW_CLOUDMODE $FTW_INCLUDE $FTW_FAILFAST || exit 1
+# add --fail-fast to exit on first failed test
+# to run only one test add -i <test> e.g. -i 920100-1
+/ftw run -d ./coreruleset/tests/regression/tests/ --config ftw.yml --overrides overrides.yml --read-timeout=10s --cloud=$FTW_CLOUDMODE $FTW_INCLUDE  || exit 1

@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  labels:
+    meta.datumapis.com/upstream-cluster-name: local
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-benign
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: echo-benign }
+  template:
+    metadata:
+      labels: { app: echo-benign }
+    spec:
+      containers:
+        - name: echo
+          image: hashicorp/http-echo:1.0
+          args: ["-text=hello from backend", "-listen=:8080"]
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-benign
+  namespace: demo
+spec:
+  selector: { app: echo-benign }
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-sqlerr
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: echo-sqlerr }
+  template:
+    metadata:
+      labels: { app: echo-sqlerr }
+    spec:
+      containers:
+        - name: echo
+          image: hashicorp/http-echo:1.0
+          args:
+            - "-text=You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near"
+            - "-listen=:8080"
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-sqlerr
+  namespace: demo
+spec:
+  selector: { app: echo-sqlerr }
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: demo-gw
+  namespace: demo
+spec:
+  gatewayClassName: datum-downstream-gateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: demo.local
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo
+  namespace: demo
+spec:
+  parentRefs:
+    - name: demo-gw
+  hostnames:
+    - demo.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /leak
+      backendRefs:
+        - name: echo-sqlerr
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: echo-benign
+          port: 80
+---
+apiVersion: networking.datumapis.com/v1alpha
+kind: TrafficProtectionPolicy
+metadata:
+  name: enforce-waf
+  namespace: demo
+spec:
+  mode: Enforce
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: demo-gw
+  ruleSets:
+    - type: OWASPCoreRuleSet
+      owaspCoreRuleSet: {}

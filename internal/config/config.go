@@ -1,10 +1,13 @@
 // Copyright © 2023 Axkea, spacewander
 // Copyright © 2025 United Security Providers AG, Switzerland
+// Copyright © 2025 Datum Technology, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 package config
 
 import (
+	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"regexp"
@@ -17,6 +20,8 @@ import (
 	"github.com/envoyproxy/envoy/contrib/golang/common/go/api"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"coraza-waf/internal/libinjection"
@@ -24,14 +29,30 @@ import (
 	"coraza-waf/internal/re2"
 )
 
+// MatchedRuleWithContext extends MatchedRule to optionally provide access to the
+// transaction context, allowing extraction of the span context passed during
+// transaction creation.
+type MatchedRuleWithContext interface {
+	ctypes.MatchedRule
+	Context() context.Context
+}
+
 type Parser struct{}
 
 type Configuration struct {
-	directives       WafDirectives
+	Directives       WafDirectives
 	DefaultDirective string
 	HostDirectiveMap HostDirectiveMap
 	WafMaps          WafMaps
 	LogFormat        logging.LogFormat
+
+	// WafInstanceRefs maps directive names to SHA-256 hashes of their directive strings,
+	// used as cache keys for lazy WAF instantiation.
+	WafInstanceRefs map[string]string
+
+	// TraceRouteMetadataExtractorExpression is a CEL expression for extracting
+	// trace attributes from Envoy route metadata.
+	TraceRouteMetadataExtractorExpression string
 }
 
 type WafMaps map[string]coraza.WAF
@@ -43,6 +64,9 @@ type Directives struct {
 }
 
 type HostDirectiveMap map[string]string
+
+// WafCache is the global WAF instance cache shared across all configurations.
+var WafCache = NewWafCacheStore()
 
 var filePathPrefix = regexp.MustCompile(".*/")
 var maxMessageSize = 250
@@ -65,25 +89,30 @@ func (p Parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (any,
 		libinjection.Register()
 	}
 
-	if directivesRaw, ok := v.AsMap()["directives"].(map[string]interface{}); ok {
+	if directivesString, ok := v.AsMap()["directives"].(string); ok {
 		var wafDirectives WafDirectives
-		directivesJSON, err := json.Marshal(directivesRaw)
+		err := json.UnmarshalFromString(directivesString, &wafDirectives)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal directives: %w", err)
-		}
-		err = json.Unmarshal(directivesJSON, &wafDirectives)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse directives: %w", err)
+			return nil, err
 		}
 		if len(wafDirectives) == 0 {
 			return nil, errors.New("directives is empty")
 		}
-		config.directives = wafDirectives
+		config.Directives = wafDirectives
 
-		// parse the WAFs into config.wafMaps in any case
+		// Compute SHA-256 hashes of directive strings for cache keys.
+		// WAF instances are built lazily on first request via the cache.
+		config.WafInstanceRefs = make(map[string]string, len(config.Directives))
+		for wafName, wafRules := range config.Directives {
+			directivesStr := strings.Join(wafRules.SimpleDirectives, "\n")
+			directivesHash := sha256.Sum256([]byte(directivesStr))
+			config.WafInstanceRefs[wafName] = fmt.Sprintf("%x", directivesHash)
+		}
+
+		// Also pre-build WAF maps for backward compatibility with non-cached code paths.
 		wafMaps := make(WafMaps)
-		for wafName, wafRules := range config.directives {
-			wafConfig := coraza.NewWAFConfig().WithErrorCallback(errorCallback).WithRootFS(root).WithDirectives(strings.Join(wafRules.SimpleDirectives, "\n"))
+		for wafName, wafRules := range config.Directives {
+			wafConfig := coraza.NewWAFConfig().WithErrorCallback(ErrorCallback).WithRootFS(Root).WithDirectives(strings.Join(wafRules.SimpleDirectives, "\n"))
 			waf, err := coraza.NewWAF(wafConfig)
 			if err != nil {
 				return nil, fmt.Errorf("%s mapping waf init error:%s", wafName, err.Error())
@@ -95,7 +124,7 @@ func (p Parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (any,
 		return nil, errors.New("directives does not exist")
 	}
 	if defaultDirectiveString, ok := v.AsMap()["default_directive"].(string); ok {
-		_, ok := config.directives[defaultDirectiveString]
+		_, ok := config.Directives[defaultDirectiveString]
 		if !ok {
 			return nil, errors.New("the referenced default_directive does not exist in directives")
 		}
@@ -110,23 +139,22 @@ func (p Parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (any,
 		config.HostDirectiveMap = hostDirectiveMap
 
 	} else {
-		// read host_directives_map as a YAML map
-		if hostDirectiveMapRaw, ok := v.AsMap()["host_directive_map"].(map[string]interface{}); ok {
-			hostDirectiveMap := make(HostDirectiveMap, len(hostDirectiveMapRaw))
-			for host, ruleRaw := range hostDirectiveMapRaw {
-				rule, ok := ruleRaw.(string)
-				if !ok {
-					return nil, fmt.Errorf("host_directive_map value for '%s' must be a string", host)
-				}
-				_, ok = config.directives[rule]
+		// try to read host_directives_map as JSON string
+		if hostDirectiveMapString, ok := v.AsMap()["host_directive_map"].(string); ok {
+			hostDirectiveMap := make(HostDirectiveMap)
+			err := json.UnmarshalFromString(hostDirectiveMapString, &hostDirectiveMap)
+			if err != nil {
+				return nil, err
+			}
+			for host, rule := range hostDirectiveMap {
+				_, ok := config.Directives[rule]
 				if !ok {
 					return nil, fmt.Errorf("the referenced directive '%s' for host %s does not exist", rule, host)
 				}
-				hostDirectiveMap[host] = rule
 			}
 			config.HostDirectiveMap = hostDirectiveMap
 		} else {
-			return nil, errors.New("host_directive_map must be a map of host to directive name")
+			return nil, errors.New("host_directive_map is not a JSON string")
 		}
 	}
 
@@ -151,18 +179,73 @@ func (p Parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (any,
 	}
 
 	logFormat = config.LogFormat
+
+	// Parse trace_route_metadata_extractor if provided
+	if extractorValue, ok := v.AsMap()["trace_route_metadata_extractor"]; ok {
+		extractorExpr, ok := extractorValue.(string)
+		if !ok {
+			return nil, errors.New("trace_route_metadata_extractor must be a string")
+		}
+		config.TraceRouteMetadataExtractorExpression = strings.TrimSpace(extractorExpr)
+	}
+
 	return &config, nil
 }
 
 func (p Parser) Merge(parentConfig any, childConfig any) any {
-	// simply return the child config
-	return childConfig
+	if parentConfig == nil {
+		return childConfig
+	}
+	if childConfig == nil {
+		return parentConfig
+	}
+
+	parent, ok := parentConfig.(*Configuration)
+	if !ok {
+		panic("unexpected parent config type")
+	}
+	child, ok := childConfig.(*Configuration)
+	if !ok {
+		panic("unexpected child config type")
+	}
+
+	if len(child.TraceRouteMetadataExtractorExpression) == 0 && len(parent.TraceRouteMetadataExtractorExpression) > 0 {
+		child.TraceRouteMetadataExtractorExpression = parent.TraceRouteMetadataExtractorExpression
+	}
+
+	return child
 }
 
-func errorCallback(error ctypes.MatchedRule) {
+// ErrorCallback is the coraza error callback that logs rule violations and
+// records them as OTel trace events.
+func ErrorCallback(error ctypes.MatchedRule) {
+	// Try to extract the span context from the transaction if available
+	ctx := context.Background()
+	if ruleWithCtx, ok := error.(MatchedRuleWithContext); ok {
+		if ruleCtx := ruleWithCtx.Context(); ruleCtx != nil {
+			ctx = ruleCtx
+		}
+	}
+
+	// Extract span from context and add rule violation event
+	span := trace.SpanFromContext(ctx)
+	if span != nil && span.IsRecording() {
+		attrs := []attribute.KeyValue{
+			attribute.Int("coraza.rule.id", error.Rule().ID()),
+			attribute.String("coraza.rule.version", error.Rule().Version()),
+			attribute.String("coraza.rule.message", error.Message()),
+			attribute.String("coraza.rule.severity", error.Rule().Severity().String()),
+			attribute.String("coraza.rule.file", error.Rule().File()),
+			attribute.String("coraza.rule.uri", error.URI()),
+		}
+		if len(error.Rule().Tags()) > 0 {
+			attrs = append(attrs, attribute.StringSlice("coraza.rule.tags", error.Rule().Tags()))
+		}
+		span.AddEvent("coraza.rule_violation", trace.WithAttributes(attrs...))
+	}
+
 	// FTW has its own log format because they expect the log to be formatted
 	// in a specific way. Coraza already has a method that formats it correctly.
-
 	if logFormat == logging.FormatFtw {
 		msg := error.ErrorLog()
 		switch error.Rule().Severity() {
@@ -174,10 +257,8 @@ func errorCallback(error ctypes.MatchedRule) {
 			api.LogWarn(msg)
 		case ctypes.RuleSeverityNotice, ctypes.RuleSeverityInfo, ctypes.RuleSeverityDebug:
 			api.LogInfo(msg)
-		default:
-			// in case we don't have a rule severity make sure the rule appears in the logs by using error level
-			api.LogError(msg)
 		}
+
 		return
 	}
 
@@ -257,8 +338,5 @@ func errorCallback(error ctypes.MatchedRule) {
 		logger.Warn(msg)
 	case ctypes.RuleSeverityNotice, ctypes.RuleSeverityInfo, ctypes.RuleSeverityDebug:
 		logger.Info(msg)
-	default:
-		// in case we don't have a rule severity make sure the rule appears in the logs by using error level
-		logger.Error(msg)
 	}
 }

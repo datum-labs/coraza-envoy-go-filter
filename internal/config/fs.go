@@ -14,8 +14,9 @@ import (
 
 var (
 	//go:embed coreruleset
-	crs  embed.FS
-	root fs.FS
+	crs embed.FS
+	// Root is the filesystem used for resolving CRS rule paths.
+	Root fs.FS
 )
 
 func init() {
@@ -23,11 +24,14 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	root = &rulesFS{
+	Root = &rulesFS{
 		crsFS,
 		map[string]string{
 			"@coraza-setup": "coraza.conf",    // configures rule engine for coraza
 			"@crs-setup":    "crs-setup.conf", // configures coreruleset
+			// back-compat aliases for the pre-v2.0 include names still emitted downstream
+			"@recommended-conf": "coraza.conf",
+			"@crs-setup-conf":   "crs-setup.conf",
 			// TODO: remove these from release-builds?  (via buildflag?)
 			"@crs-ftw":    "crs-ftw.conf",    // configures coreruleset for ftw tests
 			"@coraza-ftw": "coraza-ftw.conf", // configures coraza for ftw tests

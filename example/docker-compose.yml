@@ -3,10 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 ---
 services:
-  albedo:
-    image: ghcr.io/coreruleset/albedo:0.2.0
+  httpbin:
+    image: mccutchen/go-httpbin:2.18.1
     environment:
       - MAX_BODY_SIZE=15728640 # 15 MiB
+    ports:
+      - 8081:8080
+    networks:
+      vpcbr:
+        ipv4_address: 10.5.0.5
 
   chown:
     image: alpine:3.16
@@ -20,7 +25,7 @@ services:
   envoy:
     depends_on:
       - chown
-      - albedo
+      - httpbin
     image: coraza-waf-envoy
     command:
       - -c
@@ -30,31 +35,21 @@ services:
       - /etc/envoy/logs/envoy.log
     volumes:
       - ./envoy.yaml:/etc/envoy/envoy.yaml
-      - ../../build/coraza-waf.so:/etc/envoy/coraza-waf.so
+      - ../build/coraza-waf.so:/etc/envoy/coraza-waf.so
       - ./logs:/etc/envoy/logs:rw
     ports:
-      - 8090:8090
+      - 10000:10000
+      - 9999:9999
     environment:
       - GODEBUG=cgocheck=0
+    networks:
+      vpcbr:
+        ipv4_address: 10.5.0.6
 
-  goFilter-logs:
-    depends_on:
-      - envoy
-    image: debian:11-slim
-    entrypoint: bash
-    command:
-      - -c
-      - tail -c +0 -f /etc/envoy/logs/envoy.log | grep --line-buffered  "\[golang\]" > /etc/envoy/logs/ftw.log
-    volumes:
-      - ./logs:/etc/envoy/logs:rw
-
-  ftw-crs:
-    depends_on:
-      - goFilter-logs
-    build:
-      context: .
-    environment:
-      - FTW_CLOUDMODE
-      - FTW_INCLUDE
-    volumes:
-      - ./logs:/etc/envoy/logs:ro
+networks:
+  vpcbr:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/16
+          gateway: 10.5.0.1

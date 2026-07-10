@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: network-services-operator-system
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: es-selfsigned
+  namespace: network-services-operator-system
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: extension-server-ca
+  namespace: network-services-operator-system
+spec:
+  isCA: true
+  commonName: extension-server-ca
+  secretName: extension-server-ca
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: es-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: es-ca-issuer
+  namespace: network-services-operator-system
+spec:
+  ca:
+    secretName: extension-server-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: extension-server-server-tls
+  namespace: network-services-operator-system
+spec:
+  secretName: extension-server-server-tls
+  duration: 8760h
+  renewBefore: 720h
+  commonName: network-services-operator-envoy-gateway-extension-server
+  dnsNames:
+    - network-services-operator-envoy-gateway-extension-server.network-services-operator-system.svc
+    - network-services-operator-envoy-gateway-extension-server.network-services-operator-system.svc.cluster.local
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - server auth
+    - digital signature
+    - key encipherment
+  issuerRef:
+    name: es-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: envoy-gateway-extension-server-eg-client-tls
+  namespace: network-services-operator-system
+spec:
+  secretName: envoy-gateway-extension-server-eg-client-tls
+  duration: 8760h
+  renewBefore: 720h
+  commonName: envoy-gateway
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - digital signature
+    - key encipherment
+    - client auth
+  issuerRef:
+    name: es-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
