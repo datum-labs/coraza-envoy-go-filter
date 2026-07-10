@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- Align CI workflows with the root source layout: build/test via `make` instead of `mage`, and scan `./...` instead of the removed `./src/`, so `main.yml` and `nightly.yml` run green.
+
 ## [v1.2.0-rc0] - 2025-10-17
 
 ### Changed
