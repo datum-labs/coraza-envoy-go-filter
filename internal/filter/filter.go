@@ -35,6 +35,18 @@ const (
 	wafOutcomeError      = "error"
 )
 
+// Envoy's golang HTTP filter drops the body of a response-phase SendLocalReply
+// when the body is empty and the upstream response headers are already
+// committed (envoyproxy/envoy#39775): the client gets a Content-Length from the
+// host local_reply_config but zero body bytes, seen as a truncated 5xx. Passing
+// a non-empty body with an explicit Content-Type makes Envoy write a complete
+// response and recompute Content-Length. Only the encode (response) path needs
+// this; the decode (request) path recomputes correctly with an empty body.
+const (
+	responseBlockedReplyBody = "Request blocked by security policy.\n"
+	responseErrorReplyBody   = "Internal server error.\n"
+)
+
 // FilterMetadata holds metadata extracted from Envoy xDS properties and route metadata.
 type FilterMetadata struct {
 	ClusterName          string
@@ -321,7 +333,7 @@ func (f *Filter) EncodeData(buffer api.BufferInstance, endStream bool) api.Statu
 		return api.Continue
 	}
 	if f.wasInterrupted {
-		f.Callbacks.EncoderFilterCallbacks().SendLocalReply(http.StatusForbidden, "", map[string][]string{}, 0, "")
+		f.sendResponseLocalReply(http.StatusForbidden, responseBlockedReplyBody)
 		return api.LocalReply
 	}
 	logger.Debug("Processing incoming response data", "size", buffer.Len())
@@ -452,7 +464,7 @@ func (f *Filter) validateRequestBody(logger logging.Logger) error {
 func (f *Filter) validateResponseBody(logger logging.Logger) error {
 	interruption, err := f.tx.ProcessResponseBody()
 	if err != nil {
-		f.Callbacks.EncoderFilterCallbacks().SendLocalReply(http.StatusInternalServerError, "", map[string][]string{}, 0, "")
+		f.sendResponseLocalReply(http.StatusInternalServerError, responseErrorReplyBody)
 		return errors.New("failed to process response body")
 	}
 	if interruption != nil {
@@ -491,8 +503,18 @@ func (f *Filter) handleInterruption(logger logging.Logger, phase phase, interrup
 	case PhaseRequestHeader, PhaseRequestBody:
 		f.Callbacks.DecoderFilterCallbacks().SendLocalReply(interruption.Status, "", map[string][]string{}, 0, "")
 	case PhaseResponseHeader, PhaseResponseBody:
-		f.Callbacks.EncoderFilterCallbacks().SendLocalReply(interruption.Status, "", map[string][]string{}, 0, "")
+		f.sendResponseLocalReply(interruption.Status, responseBlockedReplyBody)
 	}
+}
+
+func (f *Filter) sendResponseLocalReply(status int, body string) {
+	f.Callbacks.EncoderFilterCallbacks().SendLocalReply(
+		status,
+		body,
+		map[string][]string{"Content-Type": {"text/plain; charset=utf-8"}},
+		0,
+		"",
+	)
 }
 
 func (f *Filter) splitHostPort(hostPortCombination string) (string, int, error) {
