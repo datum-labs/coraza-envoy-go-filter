@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Security
+- Bump Go toolchain to 1.25.12 and upgrade OpenTelemetry (v1.43.0), gRPC (v1.80.0), `golang.org/x/net`, and `golang.org/x/sys` to clear the govulncheck-reported CVEs (GO-2026-*) in called code, so the `Vulnerability Scan` gate runs green. ([datum-cloud/infra#3336](https://github.com/datum-cloud/infra/issues/3336))
+
 ### Fixed
 - Align CI workflows with the root source layout: build/test via `make` instead of `mage`, and scan `./...` instead of the removed `./src/`, so `main.yml` and `nightly.yml` run green.
 
