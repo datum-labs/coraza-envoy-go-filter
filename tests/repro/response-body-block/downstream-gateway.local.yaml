@@ -1,0 +1,121 @@
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: auto-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: auto-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: auto-ca
+  secretName: auto
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: auto-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: auto
+spec:
+  ca:
+    secretName: auto
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: datum-downstream-gateway
+  namespace: datum-downstream-gateway
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              selector:
+                matchLabels:
+                  gateway.datum.net/role: core-deployment
+              template:
+                metadata:
+                  labels:
+                    gateway.datum.net/role: core-deployment
+        pod:
+          volumes:
+            - name: coraza-waf
+              emptyDir: {}
+        container:
+          image: envoyproxy/envoy@sha256:405acb8278374f1fc680ed93462bde5c788aae02f0e953b73a596ba1e5c36f56
+          volumeMounts:
+            - name: coraza-waf
+              mountPath: /opt/coraza-waf
+        initContainers:
+          - name: coraza-waf
+            image: ghcr.io/datum-labs/coraza-envoy-go-filter/coraza-waf:v1.3.0-alphaN  # build under test
+            imagePullPolicy: IfNotPresent
+            command:
+              - cp
+              - /coraza-waf.so
+              - /opt/coraza-waf/
+            volumeMounts:
+              - name: coraza-waf
+                mountPath: /opt/coraza-waf
+      envoyService:
+        externalTrafficPolicy: Cluster
+        type: NodePort
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - name: http-80
+                  nodePort: 30080
+                  port: 80
+                - name: https-443
+                  nodePort: 30443
+                  port: 443
+  mergeGateways: true
+  ipFamily: DualStack
+  telemetry:
+    metrics:
+      prometheus:
+        disable: false
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: datum-downstream-gateway
+spec:
+  controllerName: gateway.envoyproxy.io/datum-downstream-gateway
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: datum-downstream-gateway
+    namespace: datum-downstream-gateway
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: anchor-gateway
+  namespace: datum-downstream-gateway
+spec:
+  gatewayClassName: datum-downstream-gateway
+  listeners:
+    - protocol: HTTP
+      port: 80
+      name: default-http
+      allowedRoutes:
+        namespaces:
+          from: All

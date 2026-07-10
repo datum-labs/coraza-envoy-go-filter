@@ -6,7 +6,6 @@
 package filter
 
 import (
-	"bytes"
 	"context"
 	"coraza-waf/internal/config"
 	"coraza-waf/internal/logging"
@@ -314,10 +313,19 @@ func (f *Filter) EncodeHeaders(headerMap api.ResponseHeaderMap, endStream bool) 
 		return api.Continue
 	}
 
-	// Use StopAndBufferWatermark to stream response body data through
-	// EncodeData in chunks with backpressure, rather than StopAndBuffer
-	// which accumulates the entire response in memory and fails with
-	// response_payload_too_large for large responses.
+	// No response-body inspection needed: stream through.
+	if !f.tx.IsResponseBodyAccessible() {
+		return api.Continue
+	}
+	// Hold the upstream response headers until the response-body verdict is
+	// known. StopAndBufferWatermark buffers body chunks with backpressure while
+	// keeping header iteration stopped (headers are NOT committed downstream) so
+	// a later response-body-phase interruption can still emit a branded local
+	// reply. Returning Continue here (as the previous code did on non-final
+	// EncodeData chunks) commits the 200 headers, after which any block is
+	// undeliverable — the client gets the origin 200 (silent WAF bypass) or a
+	// mid-stream reset (envoyproxy/envoy#39775). EncodeData releases the held
+	// headers once coraza reaches SecResponseBodyLimit or the body ends.
 	return api.StopAndBufferWatermark
 }
 
@@ -361,20 +369,34 @@ func (f *Filter) EncodeData(buffer api.BufferInstance, endStream bool) api.Statu
 			f.handleInterruption(logger, PhaseResponseBody, interruption)
 			return api.LocalReply
 		}
+		// coraza accepted fewer bytes than we handed it: SecResponseBodyLimit is
+		// reached and it processed the buffered portion without blocking. It will
+		// not inspect any more of the body, so stop holding — release the
+		// headers + buffered data and stream the remainder. Continuing to buffer
+		// past this point would exceed the proxy's per_connection_buffer_limit
+		// and surface as response_payload_too_large (500). SecResponseBodyLimit
+		// must therefore be <= the gateway per_connection_buffer_limit_bytes.
+		if buffered < buffer.Len() {
+			logger.Debug("response body limit reached without interruption; releasing", "inspected", buffered)
+			return api.Continue
+		}
 	}
-	// We reached the end of the body
+	// We reached the end of the body: evaluate and either block or release.
 	if endStream {
 		err := f.validateResponseBody(logger)
 		if err != nil {
-			if serr := buffer.Set(bytes.Repeat([]byte("\x00"), buffer.Len())); serr != nil {
-				logger.Error("failed to write into internal buffer", "error", serr)
-			}
 			logger.Error("response validation failed", "error", err.Error())
 			return api.LocalReply
 		}
+		return api.Continue
 	}
 
-	return api.Continue
+	// More body to come. Keep the headers held and keep buffering so a
+	// later response-body-phase interruption can still emit a local reply;
+	// streaming (Continue) here commits the upstream headers and makes the
+	// block undeliverable (envoyproxy/envoy#39775). coraza bounds the buffer
+	// at SecResponseBodyLimit.
+	return api.StopAndBufferWatermark
 }
 
 func (f *Filter) OnDestroy(reason api.DestroyReason) {
