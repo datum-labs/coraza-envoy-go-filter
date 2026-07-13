@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Emit the matched variable, key, and (config-gated) value plus the rule message on the `coraza.rule_violation` and `coraza.interruption` span events, so downstream traces can attribute a block to *what* a rule matched, not just the rule id. The payload-bearing matched value is gated behind `emit_matched_value` (default off) and truncated; the variable name and key are always emitted. ([datum-cloud/infra#3418](https://github.com/datum-cloud/infra/issues/3418))
+
 ### Security
 - Bump Go toolchain to 1.25.12 and upgrade OpenTelemetry (v1.43.0), gRPC (v1.80.0), `golang.org/x/net`, and `golang.org/x/sys` to clear the govulncheck-reported CVEs (GO-2026-*) in called code, so the `Vulnerability Scan` gate runs green. ([datum-cloud/infra#3336](https://github.com/datum-cloud/infra/issues/3336))
 
