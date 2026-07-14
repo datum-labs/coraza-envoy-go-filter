@@ -29,6 +29,8 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
+      - name: Run unit tests
+        run: make test
       - name: Build shared object
         run: make build
       - name: Run FTW tests

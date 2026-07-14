@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Add a `make test` target (`go test ./internal/...`) and run it in the `Testbench` CI job, so in-process Go unit tests execute on every push/PR. Previously CI ran only the docker-based FTW/e2e curl testbenches, leaving unit tests unexecuted. ([datum-cloud/infra#3418](https://github.com/datum-cloud/infra/issues/3418))
+
 ## [v2.0.2-datum.1] - 2026-07-10
 
 *Datum realign of the downstream fork onto upstream v2.0.2 (see [datum-cloud/infra#3333](https://github.com/datum-cloud/infra/issues/3333)).*
