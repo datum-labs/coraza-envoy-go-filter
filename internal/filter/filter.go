@@ -27,6 +27,8 @@ import (
 
 const HOSTPOSTSEPARATOR string = ":"
 
+const maxMatchedValueSize = 250
+
 const (
 	wafOutcomeProcessing = "processing"
 	wafOutcomeAllowed    = "allowed"
@@ -516,12 +518,20 @@ func (f *Filter) handleInterruption(logger logging.Logger, phase phase, interrup
 		attribute.Int("http.status_code", interruption.Status),
 		attribute.String("coraza.interruption.phase", phase.String()),
 	)
-	f.spanAddEvent("coraza.interruption", trace.WithAttributes(
+	interruptionAttrs := []attribute.KeyValue{
 		attribute.Int("coraza.rule.id", interruption.RuleID),
 		attribute.String("coraza.rule.action", interruption.Action),
 		attribute.Int("http.status_code", interruption.Status),
 		attribute.String("coraza.interruption.phase", phase.String()),
-	))
+	}
+	if interruption.Data != "" {
+		interruptionAttrs = append(interruptionAttrs, attribute.String("coraza.interruption.data", interruption.Data))
+	}
+	if f.tx != nil {
+		matched := matchedRuleByID(f.tx.MatchedRules(), interruption.RuleID)
+		interruptionAttrs = append(interruptionAttrs, matchedRuleEventAttrs(matched, f.Config.EmitMatchedValue)...)
+	}
+	f.spanAddEvent("coraza.interruption", trace.WithAttributes(interruptionAttrs...))
 
 	switch phase {
 	case PhaseRequestHeader, PhaseRequestBody:
@@ -529,6 +539,46 @@ func (f *Filter) handleInterruption(logger logging.Logger, phase phase, interrup
 	case PhaseResponseHeader, PhaseResponseBody:
 		f.sendResponseLocalReply(interruption.Status, responseBlockedReplyBody)
 	}
+}
+
+// matchedRuleByID returns the matched rule whose ID equals the interrupting
+// rule id, falling back to the last matched rule when no id matches.
+func matchedRuleByID(rules []types.MatchedRule, id int) types.MatchedRule {
+	var last types.MatchedRule
+	for _, r := range rules {
+		last = r
+		if r.Rule().ID() == id {
+			return r
+		}
+	}
+	return last
+}
+
+// matchedRuleEventAttrs derives span-event attributes describing what a rule
+// matched: the rule message, the matched variable name and key, and (only when
+// emitValue is set) the truncated matched value, which can carry request payload.
+func matchedRuleEventAttrs(mr types.MatchedRule, emitValue bool) []attribute.KeyValue {
+	if mr == nil {
+		return nil
+	}
+	attrs := []attribute.KeyValue{
+		attribute.String("coraza.rule.message", mr.Message()),
+	}
+	if mds := mr.MatchedDatas(); len(mds) > 0 {
+		md := mds[0]
+		attrs = append(attrs,
+			attribute.String("coraza.match.variable", md.Variable().Name()),
+			attribute.String("coraza.match.key", md.Key()),
+		)
+		if emitValue {
+			mv := md.Value()
+			if len(mv) > maxMatchedValueSize {
+				mv = mv[:maxMatchedValueSize]
+			}
+			attrs = append(attrs, attribute.String("coraza.match.value", mv))
+		}
+	}
+	return attrs
 }
 
 func (f *Filter) sendResponseLocalReply(status int, body string) {

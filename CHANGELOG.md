@@ -4,6 +4,7 @@
 
 ### Added
 - Add a `make test` target (`go test ./internal/...`) and run it in the `Testbench` CI job, so in-process Go unit tests execute on every push/PR. Previously CI ran only the docker-based FTW/e2e curl testbenches, leaving unit tests unexecuted. ([datum-cloud/infra#3418](https://github.com/datum-cloud/infra/issues/3418))
+- Emit the matched variable, key, and (config-gated) value plus the rule message on the `coraza.rule_violation` and `coraza.interruption` span events, so downstream traces can attribute a block to *what* a rule matched, not just the rule id. The payload-bearing matched value is gated behind `emit_matched_value` (default off) and truncated; the variable name and key are always emitted. ([datum-cloud/infra#3411](https://github.com/datum-cloud/infra/issues/3411))
 
 ## [v2.0.2-datum.1] - 2026-07-10
 

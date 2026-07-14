@@ -53,6 +53,12 @@ type Configuration struct {
 	// TraceRouteMetadataExtractorExpression is a CEL expression for extracting
 	// trace attributes from Envoy route metadata.
 	TraceRouteMetadataExtractorExpression string
+
+	// EmitMatchedValue controls whether the matched value (which can carry
+	// request payload) is emitted on rule-violation and interruption span
+	// events. The matched variable name and key are always emitted; only the
+	// value is gated. Defaults to false.
+	EmitMatchedValue bool
 }
 
 type WafMaps map[string]coraza.WAF
@@ -71,6 +77,7 @@ var WafCache = NewWafCacheStore()
 var filePathPrefix = regexp.MustCompile(".*/")
 var maxMessageSize = 250
 var logFormat = logging.FormatText
+var emitMatchedValue = false
 
 func (p Parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (any, error) {
 	configStruct := &xds.TypedStruct{}
@@ -189,6 +196,11 @@ func (p Parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (any,
 		config.TraceRouteMetadataExtractorExpression = strings.TrimSpace(extractorExpr)
 	}
 
+	if emitMatchedValueSetting, ok := v.AsMap()["emit_matched_value"].(bool); ok {
+		config.EmitMatchedValue = emitMatchedValueSetting
+	}
+	emitMatchedValue = config.EmitMatchedValue
+
 	return &config, nil
 }
 
@@ -211,6 +223,10 @@ func (p Parser) Merge(parentConfig any, childConfig any) any {
 
 	if len(child.TraceRouteMetadataExtractorExpression) == 0 && len(parent.TraceRouteMetadataExtractorExpression) > 0 {
 		child.TraceRouteMetadataExtractorExpression = parent.TraceRouteMetadataExtractorExpression
+	}
+
+	if !child.EmitMatchedValue && parent.EmitMatchedValue {
+		child.EmitMatchedValue = parent.EmitMatchedValue
 	}
 
 	return child
@@ -240,6 +256,20 @@ func ErrorCallback(error ctypes.MatchedRule) {
 		}
 		if len(error.Rule().Tags()) > 0 {
 			attrs = append(attrs, attribute.StringSlice("coraza.rule.tags", error.Rule().Tags()))
+		}
+		if mds := error.MatchedDatas(); len(mds) > 0 {
+			md := mds[0]
+			attrs = append(attrs,
+				attribute.String("coraza.match.variable", md.Variable().Name()),
+				attribute.String("coraza.match.key", md.Key()),
+			)
+			if emitMatchedValue {
+				mv := md.Value()
+				if len(mv) > maxMessageSize {
+					mv = mv[:maxMessageSize]
+				}
+				attrs = append(attrs, attribute.String("coraza.match.value", mv))
+			}
 		}
 		span.AddEvent("coraza.rule_violation", trace.WithAttributes(attrs...))
 	}
