@@ -9,6 +9,9 @@
 - Deliver response-body-phase WAF blocks: hold the upstream response headers (`StopAndBufferWatermark`, not `Continue`, on non-final `EncodeData` chunks) until the response-body verdict, so an Enforce block emits its branded local reply instead of committing the origin `200` (silent bypass) or resetting mid-stream. Release and stream once `SecResponseBodyLimit` is reached without a block. Requires `SecResponseBodyLimit <= per_connection_buffer_limit_bytes`. ([datum-cloud/infra#3324](https://github.com/datum-cloud/infra/issues/3324))
 - Align CI workflows with the root source layout: build/test via `make` instead of `mage`, and scan `./...` instead of the removed `./src/`, so `main.yml` and `nightly.yml` run green.
 
+### Added
+- Add a `make test` target (`go test ./internal/...`) and run it in the `Testbench` CI job, so in-process Go unit tests execute on every push/PR. Previously CI ran only the docker-based FTW/e2e curl testbenches, leaving unit tests unexecuted. ([datum-cloud/infra#3418](https://github.com/datum-cloud/infra/issues/3418))
+
 ## [v1.2.0-rc0] - 2025-10-17
 
 ### Changed
