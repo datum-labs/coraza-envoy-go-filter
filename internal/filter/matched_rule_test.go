@@ -52,8 +52,8 @@ func TestMatchedRuleEventAttrsEmitsMatchedDetail(t *testing.T) {
 	if got["coraza.rule.message"] != "blocked by test" {
 		t.Errorf("rule.message = %q, want %q", got["coraza.rule.message"], "blocked by test")
 	}
-	if got["coraza.match.variable"] != "ARGS" {
-		t.Errorf("match.variable = %q, want %q", got["coraza.match.variable"], "ARGS")
+	if got["coraza.match.variable"] != "ARGS_GET" {
+		t.Errorf("match.variable = %q, want %q", got["coraza.match.variable"], "ARGS_GET")
 	}
 	if got["coraza.match.key"] != "foo" {
 		t.Errorf("match.key = %q, want %q", got["coraza.match.key"], "foo")
