@@ -30,6 +30,10 @@ ftw: clean build buildTestEnvoy
 	docker compose --file tests/ftw/docker-compose.yml run --rm ftw-crs; \
 	docker compose --file tests/ftw/docker-compose.yml down
 
+.PHONY: test
+test:
+	go test -tags=$(BUILD-TAGS) ./internal/...
+
 clean:
 	docker compose --file example/docker-compose.yml down
 	docker compose --file tests/e2e/docker-compose.yml down
