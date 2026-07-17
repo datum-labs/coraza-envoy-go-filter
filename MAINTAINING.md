@@ -77,3 +77,10 @@ runtime/config-contract issues). Run the full-stack repro in
 `tests/repro/response-body-block/` on an **edge-parity Envoy 1.37.1** stack and
 confirm: benign → `200`, inbound SQLi → `403`, response-body leak → `403` with a
 non-empty branded body. Then stage → soak → prod, one change at a time.
+
+## Cut the release
+
+Once the realign is proven, cut a release per [`RELEASING.md`](./RELEASING.md).
+The version bumps our own line and records the upstream base as build metadata
+(`vX.Y.Z+upstream.<base>`); do not reuse the upstream version or the old
+`-datum.N` suffix.
