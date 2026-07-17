@@ -9,6 +9,7 @@
 
 ### Changed
 - `release.yml` now derives the OCI image tag from the release git tag by stripping SemVer build metadata, so a `vX.Y.Z+upstream.<base>` tag publishes the image as `vX.Y.Z` (OCI tags cannot contain `+`). The upstream base and standard provenance are stamped as image labels (`org.opencontainers.image.base.version`, `.version`, `.source`, `.revision`).
+- `release.yml` runs the tag-derivation step first and extracts release notes for the clean `vX.Y.Z` version, so a `vX.Y.Z+upstream.<base>` git tag matches the `## [vX.Y.Z]` CHANGELOG header instead of failing the notes step on a build-metadata mismatch.
 
 ## [v2.0.2-datum.2] - 2026-07-15
 
