@@ -28,18 +28,11 @@ jobs:
         run: make ftw
       - name: Run e2e tests
         run: make e2e
-      - name: Generate Release Notes
-        id: notes
-        uses: theory/changelog-version-notes-action@v0.1.3
-        if: ${{ !contains(github.ref_name, '-alpha') }}
-        with:
-          version: ${{ steps.meta.outputs.image_tag }}
       - name: Release Candidate
         uses: softprops/action-gh-release@v2
         if: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha')}}
         with:
-          body_path: '${{ steps.notes.outputs.file }}'
-          generate_release_notes: false
+          generate_release_notes: true
           prerelease: true
           files: |
             LICENSE
@@ -48,11 +41,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: ${{ !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-alpha') }}
         with:
-          body_path: '${{ steps.notes.outputs.file }}'
-          generate_release_notes: false
+          generate_release_notes: true
           prerelease: false
           files: |
-            CHANGELOG.md
             LICENSE
             build/coraza-waf.so
       - name: Login to GHCR
