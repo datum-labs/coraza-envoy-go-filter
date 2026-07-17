@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Add `RELEASING.md` documenting the fork's release process: an own SemVer version line with the upstream base recorded as build metadata (`vX.Y.Z+upstream.<base>`), a clean `vX.Y.Z` image tag plus an `org.opencontainers.image.base.version` label, bump rules, and consumer guidance. Replaces the ad-hoc `-datum.N` pre-release tagging convention.
+
 ## [v2.0.2-datum.2] - 2026-07-15
 
 ### Added
