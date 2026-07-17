@@ -1,9 +1,17 @@
 # Changelog
 
+> [!NOTE]
+> Release notes moved to GitHub Releases, auto-generated from merged PRs. This
+> file is frozen as a historical record up to `v2.0.4` and is no longer
+> hand-maintained per release. See `RELEASING.md`.
+
 ## [Unreleased]
 
 ### Added
 - Add a Renovate config that opts this fork into processing and extends Datum's shared dependency update policy. The Renovate app skips forked repositories unless their own config enables `forkProcessing`, so without this file no dependency update, including a security fix, ever opens for this repository.
+
+### Changed
+- Release notes are now GitHub auto-generated from merged PRs at tag time instead of extracted from this file, and the per-PR changelog enforcer is retired. Cutting a release is a single tag push with no promotion PR.
 
 ### Fixed
 - The `Vulnerability Scan` gate has been failing on every branch and on the nightly schedule since upstream `govulncheck` raised its minimum to Go 1.26: the install step exited before the scan ran, so the job was red for a toolchain reason and no scan result was produced. Bump the Go toolchain to 1.26.8 across `go.mod`, both Dockerfiles, and the `go-version-input` in `main.yml` and `nightly.yml` so `govulncheck` installs and the gate scans again.
