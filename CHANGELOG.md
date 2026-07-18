@@ -1,9 +1,19 @@
 # Changelog
 
+> [!NOTE]
+> Release notes moved to GitHub Releases, auto-generated from merged PRs. This
+> file is frozen as a historical record up to `v2.0.3` and is no longer
+> hand-maintained per release. See `RELEASING.md`.
+
 ## [Unreleased]
 
 ### Added
 - Publish a trunk payload image on every merge to `main`, tagged `v0.0.0-main-<UTC-timestamp>-<short-sha>`, so downstream GitOps environments can automatically track the tip of `main` (mirrors the `v0.0.0-main-*` convention used by other Datum service images). ([datum-cloud/infra#3340](https://github.com/datum-cloud/infra/issues/3340))
+
+### Changed
+- Release notes are now GitHub auto-generated from merged PRs at tag time
+  instead of extracted from this file, and the per-PR changelog enforcer is
+  retired. Cutting a release is a single tag push with no promotion PR.
 
 ## [v2.0.3] - 2026-07-17
 

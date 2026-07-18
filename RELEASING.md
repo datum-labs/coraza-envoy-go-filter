@@ -46,19 +46,30 @@ all of that: our releases are first-class releases that sort and match normally.
 
 ## Cutting a release
 
-1. Land all changes on `main` (protected — requires a green `Testbench` +
-   `changelog` and one review).
-2. Update `CHANGELOG.md`: add the new `## [vX.Y.Z]` section. For a realign
-   release, state the upstream base you moved onto.
-3. Tag `main` with the full build-metadata tag and push it:
+A release is a **single tag push** — no pull request, no changelog edit.
+
+1. Land all changes on `main` (protected — requires a green `Testbench` and one
+   review).
+2. Tag `main` with the full build-metadata tag and push it:
    ```
    git tag v2.0.3+upstream.2.0.2
    git push origin v2.0.3+upstream.2.0.2
    ```
-4. `.github/workflows/release.yml` builds and pushes the image as
+3. `.github/workflows/release.yml` builds and pushes the image as
    `ghcr.io/datum-labs/coraza-envoy-go-filter/coraza-waf:v2.0.3`, stamps the
    `org.opencontainers.image.base.version` label with the upstream base, and
-   publishes a GitHub Release with generated notes.
+   publishes a GitHub Release. Release notes are **auto-generated** by GitHub
+   from the merged PRs since the previous tag, grouped by label per
+   `.github/release.yml`.
+
+### Release notes
+
+Notes come from GitHub's auto-generated release notes, not a committed file.
+To shape them, label PRs (see `.github/release.yml` for the category mapping)
+and write clear PR titles — the title is what appears in the notes.
+
+`CHANGELOG.md` is retained as a **frozen** historical record up to `v2.0.3` but
+is no longer hand-maintained per release; do not add new sections to it.
 
 ### Pre-releases
 
