@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Publish a trunk payload image on every merge to `main`, tagged `v0.0.0-main-<UTC-timestamp>-<short-sha>`, so downstream GitOps environments can automatically track the tip of `main` (mirrors the `v0.0.0-main-*` convention used by other Datum service images). ([datum-cloud/infra#3340](https://github.com/datum-cloud/infra/issues/3340))
+
 ## [v2.0.3] - 2026-07-17
 
 *First release under the SemVer-compliant scheme; git tag
