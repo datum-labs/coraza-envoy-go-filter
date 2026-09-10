@@ -15,7 +15,7 @@ ARG BASE_IMAGE=busybox:1.36
 # runs at full native speed.  When TARGETPLATFORM ≠ BUILDPLATFORM we install
 # the appropriate GNU cross-toolchain and let the Go cross-compiler do the
 # rest — no QEMU emulation required during compilation.
-FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS builder
 
 # IMPORTANT: declare platform ARGs WITHOUT defaults inside the build stage.
 # An explicit default (e.g. TARGETARCH=amd64) silently prevents BuildKit from

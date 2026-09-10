@@ -14,5 +14,5 @@ jobs:
           go-package: ./...
           repo-checkout: true
           # we need to set a version here until https://github.com/golang/go/issues/70036 is fixed..
-          go-version-input: 1.25.12
+          go-version-input: 1.26.8
           go-version-file: go.mod

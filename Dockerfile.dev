@@ -10,7 +10,7 @@ RUN mkdir /libinjection && \
     ./configure && \
     make install
 
-FROM golang:1.25 AS gobuilder
+FROM golang:1.26 AS gobuilder
 
 FROM envoy AS build
 COPY --from=gobuilder /usr/local/go /usr/local/go
