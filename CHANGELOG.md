@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [v2.0.4] - 2026-09-10
+
+*Own version line; git tag `v2.0.4+upstream.2.0.2`, upstream base `2.0.2` unchanged.*
+
 ### Fixed
 - `Parser.Parse` no longer retains the WAF instance it compiles for each plugin configuration. The instance was unread: the request path resolves its own through the `WafCache`, keyed by a SHA-256 of the directives. Because the unread instance stayed reachable for as long as Envoy held the configuration, the Go heap grew with the number of configurations parsed and the container was eventually OOM-killed. The compile is kept, because it validates the directives and keeps a malformed set failing at configuration time, and each instance is now released through `io.Closer` as soon as it has been validated. That also returns the patterns Coraza memoizes per instance. Rule enforcement is unchanged. ([datum-cloud/infra#5096](https://github.com/datum-cloud/infra/issues/5096))
 
