@@ -41,7 +41,7 @@ Config arrives as `xds.TypedStruct` → `structpb.Value`. Parsed in `internal/co
 ## Architecture
 ```
 main.go                         → Register plugin + config.Parser
-internal/config/config.go       → Parse TypedStruct, build WafMaps
+internal/config/config.go       → Parse TypedStruct, hash directives for the WAF cache
 internal/filter/filter.go       → Filter implementing 4 Envoy phases
 internal/filter/phases.go       → PhaseRequestHeader/Body, PhaseResponseHeader/Body
 internal/filter/connection_type.go → HTTP / HTTP Tunnel / WebSocket state machine
@@ -50,7 +50,7 @@ internal/libinjection/          → CGO libinjection registration (performance b
 internal/re2/                   → CGO re2 registration (performance build)
 ```
 
-`Configuration` struct: `directives` (raw SecLang), `DefaultDirective`, `HostDirectiveMap`, `WafMaps` (instantiated), `LogFormat`.
+`Configuration` struct: `directives` (raw SecLang), `DefaultDirective`, `HostDirectiveMap`, `WafInstanceRefs` (cache keys), `LogFormat`.
 
 ## Key conventions & quirks
 

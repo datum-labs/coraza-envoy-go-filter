@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -43,7 +44,6 @@ type Configuration struct {
 	Directives       WafDirectives
 	DefaultDirective string
 	HostDirectiveMap HostDirectiveMap
-	WafMaps          WafMaps
 	LogFormat        logging.LogFormat
 
 	// WafInstanceRefs maps directive names to SHA-256 hashes of their directive strings,
@@ -60,8 +60,6 @@ type Configuration struct {
 	// value is gated. Defaults to false.
 	EmitMatchedValue bool
 }
-
-type WafMaps map[string]coraza.WAF
 
 type WafDirectives map[string]Directives
 
@@ -116,17 +114,21 @@ func (p Parser) Parse(any *anypb.Any, callbacks api.ConfigCallbackHandler) (any,
 			config.WafInstanceRefs[wafName] = fmt.Sprintf("%x", directivesHash)
 		}
 
-		// Also pre-build WAF maps for backward compatibility with non-cached code paths.
-		wafMaps := make(WafMaps)
+		// Compile each directive set to validate it, then release the instance
+		// at once. The request path builds its own through WafCache, so keeping
+		// these was retention with no reader. Closing is what returns coraza's
+		// memoized patterns; the public coraza.WAF exposes no Close, so it is
+		// reached through io.Closer.
 		for wafName, wafRules := range config.Directives {
 			wafConfig := coraza.NewWAFConfig().WithErrorCallback(ErrorCallback).WithRootFS(Root).WithDirectives(strings.Join(wafRules.SimpleDirectives, "\n"))
 			waf, err := coraza.NewWAF(wafConfig)
 			if err != nil {
 				return nil, fmt.Errorf("%s mapping waf init error:%s", wafName, err.Error())
 			}
-			wafMaps[wafName] = waf
+			if closer, ok := waf.(io.Closer); ok {
+				_ = closer.Close()
+			}
 		}
-		config.WafMaps = wafMaps
 	} else {
 		return nil, errors.New("directives does not exist")
 	}
