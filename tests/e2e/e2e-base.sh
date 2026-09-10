@@ -100,7 +100,7 @@ check_body "${envoy_url_post}" false -X POST -H 'Content-Type: application/x-www
 # Testing response body detection
 ((step+=1))
 echo "[${step}/${total_steps}] (onResponseBody) Testing true positive"
-check_body "${envoy_url_post}" true -X POST -H 'Content-Type: application/x-www-form-urlencoded' --data "${truePositiveBodyPayloadForResponseBody}"
+check_body "${envoy_url_post}" false -X POST -H 'Content-Type: application/x-www-form-urlencoded' --data "${truePositiveBodyPayloadForResponseBody}"
 
 # Testing status code is correct on response body detection
 ((step+=1))

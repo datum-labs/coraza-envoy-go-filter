@@ -9,9 +9,13 @@ RUN apk update && apk add curl
 
 WORKDIR /workspace
 
+# Download CRS. This version must match the ruleset embedded in
+# internal/config/coreruleset/ (see SecComponentSignature in
+# REQUEST-901-INITIALIZATION.conf). A corpus from a different release
+# tests rules the filter does not carry.
 # Download CRS
-ADD https://github.com/coreruleset/coreruleset/archive/refs/tags/v4.18.0.tar.gz /workspace/coreruleset/
-RUN cd coreruleset && tar -xf v4.18.0.tar.gz --strip-components 1
+ADD https://github.com/coreruleset/coreruleset/archive/refs/tags/v4.25.0.tar.gz /workspace/coreruleset/
+RUN cd coreruleset && tar -xf v4.25.0.tar.gz --strip-components 1
 
 COPY ./ftw.yml /workspace/ftw.yml
 COPY ./overrides.yml /workspace/overrides.yml

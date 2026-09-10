@@ -24,11 +24,15 @@ teardownExample:
 
 e2e: clean build buildTestEnvoy
 	docker compose --file tests/e2e/docker-compose.yml up --abort-on-container-exit tests; \
-	docker compose --file tests/e2e/docker-compose.yml down
+	rc=$$?; \
+	docker compose --file tests/e2e/docker-compose.yml down; \
+	exit $$rc
 
 ftw: clean build buildTestEnvoy
 	docker compose --file tests/ftw/docker-compose.yml run --rm ftw-crs; \
-	docker compose --file tests/ftw/docker-compose.yml down
+	rc=$$?; \
+	docker compose --file tests/ftw/docker-compose.yml down; \
+	exit $$rc
 
 .PHONY: test
 test:

@@ -29,8 +29,8 @@ static_resources:
                                 {
                                   "waf1":{
                                         "simple_directives":[
-                                              "Include @demo-conf",
-                                              "Include @crs-setup-demo-conf",
+                                              "Include @coraza-setup",
+                                              "Include @crs-setup",
                                               "SecDefaultAction \"phase:3,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:4,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:5,log,auditlog,pass\"",
@@ -41,8 +41,8 @@ static_resources:
                                     },
                                   "waf2":{
                                         "simple_directives":[
-                                              "Include @demo-conf",
-                                              "Include @crs-setup-demo-conf",
+                                              "Include @coraza-setup",
+                                              "Include @crs-setup",
                                               "SecDefaultAction \"phase:3,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:4,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:5,log,auditlog,pass\"",
@@ -58,8 +58,8 @@ static_resources:
                                     },
                                   "waf3":{
                                         "simple_directives":[
-                                              "Include @demo-conf",
-                                              "Include @crs-setup-demo-conf",
+                                              "Include @coraza-setup",
+                                              "Include @crs-setup",
                                               "SecDefaultAction \"phase:3,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:4,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:5,log,auditlog,pass\"",
@@ -74,8 +74,8 @@ static_resources:
                                     },
                                   "waf4":{
                                         "simple_directives":[
-                                              "Include @demo-conf",
-                                              "Include @crs-setup-demo-conf",
+                                              "Include @coraza-setup",
+                                              "Include @crs-setup",
                                               "SecDefaultAction \"phase:3,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:4,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:5,log,auditlog,pass\"",
@@ -91,8 +91,8 @@ static_resources:
                                     },
                                   "sse-response-body-off":{
                                         "simple_directives":[
-                                              "Include @demo-conf",
-                                              "Include @crs-setup-demo-conf",
+                                              "Include @coraza-setup",
+                                              "Include @crs-setup",
                                               "SecDefaultAction \"phase:3,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:4,log,auditlog,pass\"",
                                               "SecDefaultAction \"phase:5,log,auditlog,pass\"",

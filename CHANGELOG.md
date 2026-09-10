@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- `make ftw` and `make e2e` can now report a failure. Both recipes joined the suite run and the teardown with `;`, so each target took the teardown's exit status and returned success whether the suite passed, failed, or never started. The `Testbench` CI job has therefore been green while both suites failed to start.
+- Both test fixtures asked for CRS include aliases that `internal/config/fs.go` no longer maps, so Envoy rejected the filter config and never listened. `tests/e2e/envoy.yaml` now uses `@coraza-setup` and `@crs-setup` in place of `@demo-conf` and `@crs-setup-demo-conf`, whose target files are not in the embedded ruleset at all; `tests/ftw/envoy.yaml` now uses `@coraza-ftw` and `@crs-ftw` in place of `@ftw-conf`.
+- The e2e response-body assertion required an empty body on a response-phase block, which is the behaviour [datum-cloud/infra#3324](https://github.com/datum-cloud/infra/issues/3324) reported as a defect and PR #9 changed. It now expects the delivered body.
+- The FTW regression corpus was pinned to CRS 4.18.0 while the embedded ruleset is 4.25.0, so the suite tested rules the filter does not carry. It now tracks the embedded version, and the coupling is noted where it is set.
+
 ### Added
 - Publish a trunk payload image on every merge to `main`, tagged `v0.0.0-main-<UTC-timestamp>-<short-sha>`, so downstream GitOps environments can automatically track the tip of `main` (mirrors the `v0.0.0-main-*` convention used by other Datum service images). ([datum-cloud/infra#3340](https://github.com/datum-cloud/infra/issues/3340))
 
