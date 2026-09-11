@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Add a Renovate config that opts this fork into processing and extends Datum's shared dependency update policy. The Renovate app skips forked repositories unless their own config enables `forkProcessing`, so without this file no dependency update, including a security fix, ever opens for this repository.
+
 ### Fixed
 - The `Vulnerability Scan` gate has been failing on every branch and on the nightly schedule since upstream `govulncheck` raised its minimum to Go 1.26: the install step exited before the scan ran, so the job was red for a toolchain reason and no scan result was produced. Bump the Go toolchain to 1.26.8 across `go.mod`, both Dockerfiles, and the `go-version-input` in `main.yml` and `nightly.yml` so `govulncheck` installs and the gate scans again.
 - Upgrade `google.golang.org/grpc` to v1.82.1 to clear GO-2026-6061, a pair of vulnerabilities in the xDS RBAC authorization engine and the HTTP/2 transport server. The scan reaches them through the OpenTelemetry meter provider set up in `SetupOpenTelemetry`, so they count as called code. The finding was hidden for the whole period the scan could not install.
