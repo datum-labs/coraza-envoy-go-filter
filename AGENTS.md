@@ -69,4 +69,4 @@ internal/re2/                   → CGO re2 registration (performance build)
 ```
 lint → build → ftw → e2e → govulncheck
 ```
-PRs also require a changelog entry (enforced by `dangoslen/changelog-enforcer`, skip with `skip_changelog` label).
+Release notes are generated from merged PR titles and labels at tag time, so a PR needs a clear title and a category label rather than a changelog entry. See `RELEASING.md`.
