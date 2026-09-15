@@ -10,14 +10,16 @@ jobs:
     if: ${{ github.ref_type != 'tag' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Scan source for Vulnerabilities (govulncheck)
-        uses: golang/govulncheck-action@v1
+      - name: Checkout sources
+        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          go-package: ./...
-          repo-checkout: true
-          # we need to set a version here until https://github.com/golang/go/issues/70036 is fixed..
-          go-version-input: 1.26.8
           go-version-file: go.mod
+      - name: Scan source for Vulnerabilities (govulncheck)
+        env:
+          GOTOOLCHAIN: local
+        run: go -C tools tool govulncheck -C .. ./...
   run_tests:
     name: Testbench
     if: ${{ github.ref_type != 'tag' }}
