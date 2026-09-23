@@ -1,0 +1,13 @@
+/.github/               @datum-labs/delivery
+/Dockerfile             @datum-labs/delivery
+/Dockerfile.dev         @datum-labs/delivery
+/Makefile               @datum-labs/delivery
+/MAINTAINING.md         @datum-labs/delivery
+/RELEASING.md           @datum-labs/delivery
+/go.mod                 @datum-labs/delivery
+/go.sum                 @datum-labs/delivery
+/main.go                @datum-labs/delivery
+/internal/config/*.go   @datum-labs/delivery
+/internal/filter/       @datum-labs/delivery
+/internal/telemetry/    @datum-labs/delivery
+/tests/                 @datum-labs/delivery
