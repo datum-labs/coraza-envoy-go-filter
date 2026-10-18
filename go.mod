@@ -5,7 +5,7 @@ go 1.26.8
 require (
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2
 	github.com/corazawaf/coraza-wasilibs v0.2.0
-	github.com/corazawaf/coraza/v3 v3.7.0
+	github.com/corazawaf/coraza/v3 v3.7.1-0.20260721094831-27979790f671
 	github.com/envoyproxy/envoy v1.37.1
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0
 	github.com/google/cel-go v0.26.1
