@@ -7,7 +7,7 @@
 # https://nexus-bob.u-s-p.local/#browse/browse:docker-public:v2%2Fusp%2Fsimple-sse-server
 
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
 # Copy only the server source
