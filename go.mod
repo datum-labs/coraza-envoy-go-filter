@@ -2,7 +2,7 @@ module coraza-waf
 
 go 1.26.8
 
-toolchain go1.26.11
+toolchain go1.27.4
 
 require (
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2
