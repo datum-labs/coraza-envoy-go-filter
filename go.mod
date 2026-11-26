@@ -8,12 +8,12 @@ require (
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2
 	github.com/corazawaf/coraza-wasilibs v0.2.0
 	github.com/corazawaf/coraza/v3 v3.8.1
-	github.com/envoyproxy/envoy v1.39.1
+	github.com/envoyproxy/envoy v1.39.6
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0
 	github.com/google/cel-go v0.30.0
 	github.com/google/uuid v1.6.0
 	github.com/json-iterator/go v1.1.12
-	github.com/karlseguin/ccache/v3 v3.0.6
+	github.com/karlseguin/ccache/v3 v3.0.8
 	go.opentelemetry.io/contrib/exporters/autoexport v0.70.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.68.0
 	go.opentelemetry.io/contrib/propagators/autoprop v0.68.0
@@ -23,7 +23,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
 	golang.org/x/sync v0.24.0
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
