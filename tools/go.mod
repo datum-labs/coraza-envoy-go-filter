@@ -2,6 +2,8 @@ module coraza-waf/tools
 
 go 1.26.8
 
+toolchain go1.27.4
+
 tool golang.org/x/vuln/cmd/govulncheck
 
 require (
